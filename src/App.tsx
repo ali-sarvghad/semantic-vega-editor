@@ -122,6 +122,7 @@ export function App() {
   const [aiLabeling, setAiLabeling] = useState(false);
   const [aiProgress, setAiProgress] = useState({ done: 0, total: 0 });
   const aiAbortRef = useRef<AbortController | null>(null);
+  const labelDropdownRef = useRef<HTMLDivElement | null>(null);
   const openFileInputRef = useRef<HTMLInputElement | null>(null);
   const cancelRenameRef = useRef(false);
 
@@ -141,6 +142,27 @@ export function App() {
     }
     if (saved.model) setAiModel(saved.model);
   }, []);
+
+  useEffect(() => {
+    if (!labelMenuOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && labelDropdownRef.current?.contains(target)) return;
+      setLabelMenuOpen(false);
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') setLabelMenuOpen(false);
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [labelMenuOpen]);
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const spec = activeTab.spec;
@@ -738,7 +760,7 @@ export function App() {
             <button className="tool-button" onClick={saveSpecFile}><Save size={17} /> Save</button>
             <span className="divider" />
             <button className="icon-button primary" title="Play/render and compute cohorts" onClick={runCohortDiscovery}><Play size={18} /></button>
-            <div className="label-dropdown" onMouseLeave={() => setLabelMenuOpen(false)}>
+            <div className="label-dropdown" ref={labelDropdownRef}>
               <button
                 className="tool-button label-button label-dropdown-trigger"
                 title="Choose manual or AI-assisted cohort labeling"

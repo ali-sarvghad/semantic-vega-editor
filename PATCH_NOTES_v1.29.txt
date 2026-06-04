@@ -1,0 +1,7 @@
+Semantic Vega Editor v1.29 — Non-visible layout residue handling
+
+- Fixed mixed mark cohorts where opacity-0 layout/scaffold marks and visible marks of the same Vega mark type were grouped into one authorable cohort.
+- Visible-ink elements are now materialized as normal author-labelable cohorts; non-visible drawable residue is retained only as latent metadata.
+- Opacity-0 symbol marks with pointer-events="none" are no longer treated as visible graph nodes or tooltip hit targets.
+- Graph/network cases with hidden layout symbols now produce visible node counts that match actual perceivable nodes.
+- Updated GitHub Pages Vite base path to /semantic-vega-editor/.

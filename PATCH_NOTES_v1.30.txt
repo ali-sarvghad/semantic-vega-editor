@@ -1,0 +1,5 @@
+Semantic Vega Editor v1.30
+
+- Fixed the Label dropdown so it no longer disappears when the pointer leaves the trigger button.
+- The dropdown now opens/closes by click, stays open while the user moves to the menu, closes after selecting an option, closes on outside click, and closes on Escape.
+- Preserves the v1.29 layout-residue fix for opacity-0 graph layout symbols.

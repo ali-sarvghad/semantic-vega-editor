@@ -37,8 +37,8 @@ export interface VisualCohort {
   writeCompilerAttributes?: boolean;
   /** True for structural parent/container cohorts that should be kept as hierarchy only, not as element labels. */
   containerOnly?: boolean;
-  renderStatus?: 'visible' | 'nonvisible-zero-length' | 'permanent-invisible-interaction-target' | 'permanent-invisible-structural' | 'conditional-visible';
-  visibilityMode?: 'visible-now' | 'zero-length' | 'permanent-invisible-interaction-target' | 'permanent-invisible-structural' | 'conditional-visible';
+  renderStatus?: 'visible' | 'nonvisible-zero-length' | 'nonvisible-layout-residue' | 'permanent-invisible-interaction-target' | 'permanent-invisible-structural' | 'conditional-visible';
+  visibilityMode?: 'visible-now' | 'zero-length' | 'layout-residue' | 'permanent-invisible-interaction-target' | 'permanent-invisible-structural' | 'conditional-visible';
   interactionRole?: 'tooltip-carrier' | 'hit-target' | 'interactive-reveal' | 'none';
   authoringReason?: string;
 }
@@ -556,6 +556,32 @@ function collectCohortElements(svg: SVGSVGElement, ids: string[]): Element[] {
   return ids.map((id) => elementByP3Id(svg, id)).filter((el): el is Element => Boolean(el));
 }
 
+function elementHasVisibleInkForCohorting(el: Element): boolean {
+  if (!isDrawableElement(el)) return false;
+  if (el.tagName.toLowerCase() === 'line' && isZeroLengthLine(el)) return false;
+  return hasComputedPaintInk(el);
+}
+
+function splitDrawableIdsByVisibleInk(svg: SVGSVGElement, ids: string[]): { visibleIds: string[]; nonVisibleIds: string[] } {
+  const visibleIds: string[] = [];
+  const nonVisibleIds: string[] = [];
+  ids.forEach((id) => {
+    const el = elementByP3Id(svg, id);
+    if (!el) return;
+    if (elementHasVisibleInkForCohorting(el)) visibleIds.push(id);
+    else nonVisibleIds.push(id);
+  });
+  return { visibleIds, nonVisibleIds };
+}
+
+function groupHasAnyVisibleInk(group: Element): boolean {
+  return getDrawableIds(group).some((id) => {
+    const svg = (group as SVGElement).ownerSVGElement;
+    const el = svg ? elementByP3Id(svg, id) : null;
+    return Boolean(el && elementHasVisibleInkForCohorting(el));
+  });
+}
+
 function idsHaveVisibleInk(svg: SVGSVGElement, ids: string[]): boolean {
   return collectCohortElements(svg, ids).some((el) => {
     if (el.tagName.toLowerCase() === 'line' && isZeroLengthLine(el)) return false;
@@ -577,10 +603,25 @@ function hasTooltipLikeElement(group: Element): boolean {
   return Array.from(group.querySelectorAll('title, desc')).some((el) => /tooltip/i.test(el.textContent || ''));
 }
 
+function pointerEventsCanReceiveInput(el: Element): boolean {
+  const raw = (el.getAttribute('pointer-events') || '').trim().toLowerCase();
+  if (raw === 'none') return false;
+  try {
+    const computed = window.getComputedStyle(el);
+    return (computed.pointerEvents || '').toLowerCase() !== 'none';
+  } catch {
+    return raw !== 'none';
+  }
+}
+
 function hasInvisibleHitTargetShape(group: Element): boolean {
-  const type = markType(group);
-  if (type === 'symbol') return true;
-  return Array.from(group.querySelectorAll('*')).some((el) => isDrawableElement(el) && !hasComputedPaintInk(el));
+  // Opacity-0 marks are common in Vega as layout/scaffold marks. Do not classify
+  // them as tooltip/hit-target carriers unless they can actually receive input.
+  return Array.from(group.querySelectorAll('*')).some((el) => (
+    isDrawableElement(el) &&
+    !hasComputedPaintInk(el) &&
+    pointerEventsCanReceiveInput(el)
+  ));
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -684,6 +725,18 @@ function classifyCohortVisibility(svg: SVGSVGElement, ids: string[], groups: Ele
     authoringReason: tooltipLike
       ? 'Excluded from normal cohorting and retained only as compact latent metadata because it has no visible ink and appears to serve as an invisible tooltip/hit-target carrier.'
       : 'Excluded from normal cohorting because it has no visible ink and no interaction-reveal evidence was found.'
+  };
+}
+
+function classifyNonVisibleResidue(reason: string): CohortVisibilityClassification {
+  return {
+    renderStatus: 'nonvisible-layout-residue',
+    visibilityMode: 'layout-residue',
+    interactionRole: 'none',
+    authorable: false,
+    writeCompilerAttributes: false,
+    evidence: reason,
+    authoringReason: 'Excluded from normal cohorting because these drawable elements have no perceivable ink in the current render. They are retained only as latent layout/residue metadata.'
   };
 }
 
@@ -886,22 +939,53 @@ export function discoverVisualCohorts(svg: SVGSVGElement, compiledSpec?: unknown
   });
   Array.from(markBuckets.entries()).forEach(([key, groups], index) => {
     const type = key.replace('mark-', '');
-    const ids = Array.from(new Set(groups.flatMap((group) => getDrawableIds(group))));
-    const base = {
-      id: `cohort_data_${safeSlug(key)}_${index}`,
-      title: `${type} data marks`,
-      type: type === 'text' ? 'text-label' as CohortType : 'data-mark' as CohortType,
-      suggestedRole: suggestionFromMark(groups[0]),
-      evidence: `${groups.length} Vega role-mark group(s); class=${groups[0].getAttribute('class') || ''}`,
-      elementIds: ids,
-      rootIds: groups.map((el) => el.getAttribute('p3-element-id') || '').filter(Boolean),
-      count: ids.length,
-      authorable: true
-    };
-    const classified = applyVisibilityClassification(base, classifyCohortVisibility(svg, ids, groups, type, interactionInfo));
-    if (shouldMaterializeAsNormalCohort(classified)) {
-      addCohort(cohorts, seen, svg, classified);
-    } else {
+    const allIds = Array.from(new Set(groups.flatMap((group) => getDrawableIds(group))));
+    const { visibleIds, nonVisibleIds } = splitDrawableIdsByVisibleInk(svg, allIds);
+    const visibleGroups = groups.filter(groupHasAnyVisibleInk);
+    const nonVisibleGroups = groups.filter((group) => !groupHasAnyVisibleInk(group));
+    const baseId = `cohort_data_${safeSlug(key)}_${index}`;
+    const baseTitle = `${type} data marks`;
+    const baseType = type === 'text' ? 'text-label' as CohortType : 'data-mark' as CohortType;
+    const baseEvidence = `${groups.length} Vega role-mark group(s); class=${groups[0].getAttribute('class') || ''}`;
+
+    if (visibleIds.length > 0) {
+      const visibleBase = {
+        id: baseId,
+        title: baseTitle,
+        type: baseType,
+        suggestedRole: suggestionFromMark(visibleGroups[0] || groups[0]),
+        evidence: nonVisibleIds.length > 0
+          ? `${baseEvidence} Visible rendered ink was materialized; ${nonVisibleIds.length} non-visible drawable layout/residue element(s) were excluded from this normal cohort.`
+          : baseEvidence,
+        elementIds: visibleIds,
+        rootIds: (visibleGroups.length ? visibleGroups : groups).map((el) => el.getAttribute('p3-element-id') || '').filter(Boolean),
+        count: visibleIds.length,
+        authorable: true
+      };
+      const classified = applyVisibilityClassification(visibleBase, classifyCohortVisibility(svg, visibleIds, visibleGroups.length ? visibleGroups : groups, type, interactionInfo));
+      if (shouldMaterializeAsNormalCohort(classified)) {
+        addCohort(cohorts, seen, svg, classified);
+      } else {
+        latentNonRendering.push(summarizeLatentNonRenderingCohort(classified, type));
+      }
+    }
+
+    if (nonVisibleIds.length > 0) {
+      const residueBase = {
+        id: `${baseId}_latent-layout-residue`,
+        title: `${baseTitle} · non-visible layout residue`,
+        type: baseType,
+        suggestedRole: suggestionFromMark(nonVisibleGroups[0] || groups[0]),
+        evidence: `${baseEvidence} ${nonVisibleIds.length} drawable element(s) have no visible ink in the current render.`,
+        elementIds: nonVisibleIds,
+        rootIds: (nonVisibleGroups.length ? nonVisibleGroups : groups).map((el) => el.getAttribute('p3-element-id') || '').filter(Boolean),
+        count: nonVisibleIds.length,
+        authorable: false
+      };
+      const info = type ? interactionInfo.get(type) : undefined;
+      const classified = info?.maybeInteractionRevealed
+        ? applyVisibilityClassification(residueBase, classifyCohortVisibility(svg, nonVisibleIds, nonVisibleGroups.length ? nonVisibleGroups : groups, type, interactionInfo))
+        : applyVisibilityClassification(residueBase, classifyNonVisibleResidue('Drawable elements have no visible ink in the current render and are treated as layout/residue rather than authorable visualization content.'));
       latentNonRendering.push(summarizeLatentNonRenderingCohort(classified, type));
     }
   });
@@ -1211,7 +1295,7 @@ function compactElementRecordFromSvgElement(el: SVGElement) {
 function buildNativeCompactVem(svg: SVGSVGElement, cohorts: VisualCohort[], labels: CohortLabels, dataAnnotations: ElementDataAnnotations) {
   const viewBox = (svg.getAttribute('viewBox') || '').split(/[ ,]+/).map(Number).filter(Number.isFinite);
   const compactCohorts = cohorts
-    .filter((cohort) => cohort.containerOnly !== true && cohort.renderStatus !== 'nonvisible-zero-length' && cohort.renderStatus !== 'permanent-invisible-interaction-target' && cohort.renderStatus !== 'permanent-invisible-structural' && (cohort.authorable !== false || cohort.writeCompilerAttributes === true))
+    .filter((cohort) => cohort.containerOnly !== true && cohort.renderStatus !== 'nonvisible-zero-length' && cohort.renderStatus !== 'nonvisible-layout-residue' && cohort.renderStatus !== 'permanent-invisible-interaction-target' && cohort.renderStatus !== 'permanent-invisible-structural' && (cohort.authorable !== false || cohort.writeCompilerAttributes === true))
     .map((cohort, index) => {
       const elements = renderableElementsForCohort(svg, cohort);
       const records = elements.map(compactElementRecordFromSvgElement);

@@ -15,7 +15,7 @@ The tool is designed for research and prototyping around **semantic visualizatio
 
 ---
 
-## Live Demo
+## Live demo
 
 The editor is deployed through GitHub Pages:
 
@@ -29,7 +29,7 @@ https://ali-sarvghad.github.io/semantic-vega-editor/
 
 Vega and Vega-Lite specifications are rich, declarative descriptions of visualizations. They define data transformations, encodings, marks, scales, axes, legends, and interactions.
 
-However, once a visualization is rendered as SVG, much of this semantic structure becomes difficult to recover. A rendered SVG may contain many `<path>`, `<text>`, `<g>`, and other SVG elements, but those elements do not always clearly indicate:
+However, once a visualization is rendered as SVG, much of this semantic structure becomes difficult to recover. A rendered SVG may contain many `<path>`, `<text>`, `<line>`, `<rect>`, `<symbol>`, and `<g>` elements, but those elements do not always clearly indicate:
 
 - which elements are data marks,
 - which text elements are axis labels,
@@ -37,7 +37,7 @@ However, once a visualization is rendered as SVG, much of this semantic structur
 - which marks encode which data fields,
 - which marks belong to the same logical visual group,
 - which elements should be edited together,
-- which elements are visible, hidden, or generated for layout,
+- which elements are visible, hidden, or generated only for layout,
 - how an end-user request should be mapped to SVG elements.
 
 This creates a problem for downstream systems that need to transform, personalize, explain, or interact with visualizations after rendering.
@@ -45,6 +45,128 @@ This creates a problem for downstream systems that need to transform, personaliz
 Semantic Vega Editor addresses this problem by adding a **human-in-the-loop semantic authoring layer** between the declarative specification and the rendered SVG.
 
 The editor does not assume that all semantic meaning can be inferred automatically. Instead, it helps the visualization author inspect automatically detected visual cohorts and provide meaningful labels. These labels then become part of the exported semantic artifacts.
+
+---
+
+## For Vega / Vega-Lite users: what is SVA?
+
+If you are used to a typical Vega or Vega-Lite editor, the main difference is that **Semantic Vega Editor does not stop at rendering the chart**.
+
+A typical Vega editor supports this workflow:
+
+```text
+Write Vega/Vega-Lite spec → render chart → inspect output → export or embed chart
+```
+
+Semantic Vega Editor extends that workflow:
+
+```text
+Write Vega/Vega-Lite spec → render chart → discover visual cohorts → label cohorts → generate semantic artifacts
+```
+
+The key output of this additional workflow is the **Semantic Vega Artifact (SVA)**.
+
+---
+
+## What is SVA?
+
+**SVA**, or **Semantic Vega Artifact**, is a semantically enriched representation of a Vega/Vega-Lite visualization.
+
+It connects:
+
+1. the original Vega or Vega-Lite specification,
+2. the rendered SVG,
+3. automatically discovered groups of visual elements,
+4. human-authored semantic labels,
+5. machine-readable metadata for downstream tools.
+
+In a normal rendered SVG, a chart may contain many `<path>`, `<text>`, `<line>`, `<rect>`, and `<g>` elements. However, the SVG does not always reliably tell another system what those elements mean.
+
+For example, a typical SVG may not clearly indicate:
+
+```text
+these circles are graph nodes
+these paths are graph links
+these text elements are node labels
+these rectangles are data bars
+these text elements are x-axis labels
+these symbols belong to the legend
+these marks encode the field "temperature"
+```
+
+SVA adds this missing semantic layer.
+
+A simple way to think about it is:
+
+```text
+Vega describes how to draw the visualization.
+SVA describes what the drawn visualization means.
+```
+
+---
+
+## How SVA differs from a typical Vega output
+
+A typical Vega/Vega-Lite workflow gives you:
+
+- a rendered visualization,
+- optionally an SVG or Canvas output,
+- the original declarative specification.
+
+Semantic Vega Editor gives you those plus semantic structure.
+
+| Output | Typical Vega editor | Semantic Vega Editor |
+|---|---|---|
+| Vega/Vega-Lite specification | Yes | Yes |
+| Rendered chart | Yes | Yes |
+| SVG output | Sometimes | Yes |
+| Semantic grouping of elements | No | Yes |
+| Author-labeled visual cohorts | No | Yes |
+| Data-aware element metadata | Limited after rendering | Yes |
+| Downstream transformation metadata | No | Yes |
+| SVA export | No | Yes |
+| SSVG export | No | Yes |
+| CompactVEM export | No | Yes |
+
+The goal is not to replace Vega or Vega-Lite. Instead, Semantic Vega Editor adds a semantic authoring layer on top of the rendered visualization.
+
+---
+
+## Why SVA is useful
+
+SVA is useful when another system needs to reason about, edit, personalize, or explain a visualization after it has already been produced.
+
+For example, suppose a user asks:
+
+```text
+Make the rainy months more prominent.
+```
+
+A regular SVG editor may only see rectangles with colors and positions. It may not know which rectangles represent rainy months.
+
+An SVA-aware system can use semantic metadata to identify:
+
+```text
+data bars where weather = Rain
+```
+
+and apply the edit to the correct marks.
+
+Another example:
+
+```text
+Hide the graph links but keep the node labels.
+```
+
+SVA can help a downstream system distinguish between:
+
+```text
+graph links → path cohort
+graph nodes → symbol cohort
+graph node labels → text-label cohort
+```
+
+This is especially important for **post-production personalization (P3)**, where visualizations are adapted after rendering based on user needs, preferences, accessibility requirements, or natural-language requests.
 
 ---
 
@@ -74,10 +196,14 @@ Examples include:
 - all bars in a bar chart,
 - all points in a scatterplot,
 - all rectangles in a heatmap,
+- graph nodes,
+- graph links,
+- graph node labels,
 - all x-axis tick labels,
 - all y-axis tick labels,
 - an axis title,
 - legend labels,
+- legend symbols,
 - legend title,
 - gridlines,
 - annotation marks,
@@ -165,6 +291,100 @@ The typical workflow is:
 
 ---
 
+## How to use Semantic Vega Editor if you are familiar with Vega Editor
+
+### 1. Write or paste a Vega/Vega-Lite specification
+
+Use the code editor as you would in a typical Vega editor.
+
+### 2. Render the visualization
+
+Click the render/play button to compile and display the chart.
+
+### 3. Inspect the rendered chart
+
+Check that the visualization appears correctly before generating semantic artifacts.
+
+### 4. Start labeling
+
+Click the **Label** button. The editor will identify visual cohorts in the rendered SVG.
+
+A cohort is a group of visual elements that play a shared role, such as:
+
+```text
+data bars
+graph nodes
+graph links
+axis labels
+legend labels
+legend symbols
+chart title
+annotations
+```
+
+### 5. Choose a labeling mode
+
+The editor supports two labeling modes.
+
+#### Manual Label
+
+Use **Manual Label** when you want to provide semantic labels yourself.
+
+Good labels describe the meaning of the visual elements:
+
+```text
+monthly temperature bars
+weather type legend labels
+x-axis month labels
+graph nodes
+graph links
+graph node labels
+```
+
+Avoid labels that only describe appearance:
+
+```text
+blue things
+small text
+circles
+lines
+```
+
+#### Label with AI
+
+Use **Label with AI** when you want the system to suggest labels automatically.
+
+AI labeling requires your own **OpenAI API key**. The editor may ask you to provide:
+
+- an OpenAI API key,
+- a model,
+- whether to save the key/model settings locally in the browser.
+
+AI-generated labels should be reviewed and corrected before exporting final semantic artifacts.
+
+### 6. Generate SVA
+
+Once all required cohorts are labeled, generate the **Semantic Vega Artifact (SVA)**.
+
+The SVA can then be used by downstream tools for:
+
+- semantic chart inspection,
+- visualization transformation,
+- natural-language editing,
+- accessibility support,
+- post-production personalization,
+- AI-assisted explanation,
+- target resolution for SVG manipulation.
+
+### 7. Export additional artifacts if needed
+
+Depending on your workflow, you may also export:
+
+- **SSVG**: Semantic SVG with semantic attributes directly embedded in SVG elements.
+- **CompactVEM**: Compact Visual Edit Model for AI-assisted transformation and target selection.
+
+---
+
 ## Manual labeling
 
 In manual labeling mode, the author reviews each cohort and types a label that describes what the cohort means in the visualization.
@@ -187,6 +407,18 @@ legend labels for daily change color scale
 
 ```text
 data rectangles encoding daily S&P 500 changes
+```
+
+```text
+graph nodes
+```
+
+```text
+graph links
+```
+
+```text
+graph node labels
 ```
 
 ```text
@@ -297,7 +529,7 @@ The editor analyzes the rendered SVG rather than relying only on the original sp
 
 ### Cohort discovery
 
-The editor identifies meaningful groups of visual elements, such as data marks, axes, legends, labels, and annotations.
+The editor identifies meaningful groups of visual elements, such as data marks, axes, legends, labels, annotations, graph nodes, graph links, and graph labels.
 
 ### Manual cohort labeling
 
@@ -318,6 +550,10 @@ The editor generates semantic outputs that can be used for downstream editing, t
 ### Exportable outputs
 
 The editor supports multiple output formats, including SVA, SSVG, and CompactVEM.
+
+### Layout-residue handling
+
+The editor attempts to distinguish visible renderable marks from non-visible layout residue. For example, some Vega graph layouts generate opacity-0 symbols used for layout or scaffolding. These should not be treated as normal visible data marks in the final semantic artifact.
 
 ---
 
@@ -351,6 +587,7 @@ An SVA may include:
 
 - source specification metadata,
 - chart-level metadata,
+- rendered SVG metadata,
 - cohort metadata,
 - author labels,
 - role information,
@@ -660,69 +897,83 @@ Validation metadata can support:
 
 ---
 
-## How to use the editor
+## Relationship between SVA, SSVG, and CompactVEM
 
-### 1. Load or write a specification
+Semantic Vega Editor can produce multiple related outputs.
 
-Open the editor and paste a Vega or Vega-Lite specification into the code editor.
+### SVA
 
-### 2. Render the chart
+The **Semantic Vega Artifact** is the main authoring-level artifact. It connects the specification, rendered SVG, cohorts, labels, and semantic metadata.
 
-Use the render/play button to compile and display the visualization.
+Use SVA when you need a complete semantic record of the visualization.
 
-### 3. Inspect the visualization
+### SSVG
 
-Review the rendered output and confirm that the chart appears correctly.
+The **Semantic SVG** is the rendered SVG enriched with semantic attributes. It is useful when another system needs to directly manipulate SVG elements.
 
-### 4. Start cohort labeling
+For example, an SSVG element may include attributes such as:
 
-Run the cohort labeling workflow. The editor will show detected cohorts.
+```html
+p3-element-id="p3_el_00046"
+p3-cohort-id="cohort_data_mark-rect_0"
+p3-role="monthly temperature bars"
+p3-viz-part="data-mark"
+p3-data-role="data"
+p3-data-value="{...}"
+p3-paint-fill="#4c78a8"
+```
 
-### 5. Choose manual or AI labeling
+Use SSVG when you need DOM-level selection, transformation, styling, or interaction.
 
-The labeling workflow can be performed in two ways:
+### CompactVEM
 
-#### Manual Label
+The **Compact Visual Edit Model** is a smaller, transformation-oriented summary of the visualization. It is intended to help AI or rule-based systems reason about the chart without reading the full SVG.
 
-Choose **Manual Label** to type labels yourself.
+Use CompactVEM when you need to:
 
-Use this mode when:
+- resolve natural-language edit targets,
+- identify relevant cohorts,
+- generate transformation plans,
+- reduce the amount of context sent to an AI model.
 
-- the chart contains sensitive data,
-- you want full control over labels,
-- the chart is small enough to label manually,
-- you do not want to use an external AI model.
+---
 
-#### Label with AI
+## Example: from Vega chart to SVA-enabled editing
 
-Choose **Label with AI** to use an OpenAI model to suggest labels.
+Imagine a Vega chart showing monthly maximum temperature, where bar color encodes weather type.
 
-Use this mode when:
+In a normal Vega editor, after rendering, the output may simply contain SVG paths.
 
-- the chart has many cohorts,
-- you want faster first-pass labels,
-- you are comfortable sending cohort context to the model,
-- you plan to review and correct suggested labels.
+In Semantic Vega Editor, the author can label cohorts such as:
 
-If model information has not already been saved, the editor will ask for:
+```text
+monthly temperature bars
+x-axis month labels
+y-axis temperature labels
+weather type legend symbols
+weather type legend labels
+chart title
+```
 
-- your OpenAI API key,
-- the model to use,
-- whether to save this information locally.
+The resulting SVA allows a downstream system to interpret requests such as:
 
-If model information has already been saved, AI labeling can start directly.
+```text
+Highlight rainy months.
+```
 
-### 6. Review labels
+```text
+Make the weather legend larger.
+```
 
-Review all labels before generating the final semantic artifact. AI-generated labels may need correction.
+```text
+Explain what the red bars mean.
+```
 
-### 7. Generate semantic outputs
+```text
+Hide the y-axis labels.
+```
 
-Once all required cohorts are labeled, generate the semantic outputs.
-
-### 8. Export outputs
-
-Export the SVA, SSVG, CompactVEM, or other available outputs for downstream use.
+Instead of guessing from raw SVG, the downstream system can use the SVA to identify the correct semantic targets.
 
 ---
 
@@ -730,7 +981,7 @@ Export the SVA, SSVG, CompactVEM, or other available outputs for downstream use.
 
 ### Natural-language visualization editing
 
-A downstream system can use the exported artifacts to interpret requests such as:
+A downstream system can use SVA, SSVG, or CompactVEM to interpret requests such as:
 
 ```text
 Make the negative daily changes more visible.
@@ -870,13 +1121,13 @@ Declarative grammars for specifying interactive visualizations.
 
 Scalable Vector Graphics, the rendered vector representation of the chart.
 
-### SSVG
-
-Semantic SVG: an SVG enriched with semantic attributes and metadata.
-
 ### SVA
 
 Semantic Vega Artifact: an authoring-level semantic artifact connecting the original specification, rendered visualization, cohorts, labels, and semantic metadata.
+
+### SSVG
+
+Semantic SVG: an SVG enriched with semantic attributes and metadata.
 
 ### CompactVEM
 
@@ -888,11 +1139,11 @@ A group of related visual elements that share a semantic or structural role in t
 
 ### Data mark
 
-A visual element that represents data, such as a bar, point, line segment, rectangle, or area.
+A visual element that represents data, such as a bar, point, line segment, rectangle, symbol, path, or area.
 
 ### Visualization part
 
-The functional part of the visualization that an element belongs to, such as data mark, axis label, axis title, legend label, legend title, gridline, or annotation.
+The functional part of the visualization that an element belongs to, such as data mark, axis label, axis title, legend label, legend title, gridline, annotation, graph node, graph link, or text label.
 
 ### Post-production personalization
 

@@ -1,0 +1,13 @@
+Semantic Vega Editor v1.26 — AI-assisted cohort labeling
+
+Changes:
+- Converted the Label toolbar button into a dropdown with two modes: Manual Label and Label with AI.
+- Added an OpenAI labeling dialog with API key entry, model loading/selection, and optional local browser storage for the key/model.
+- Added one-by-one AI cohort labeling. Each cohort is rendered as a focused highlighted thumbnail, rasterized, and sent to the selected OpenAI vision-capable model.
+- Added progress reporting during AI labeling and automatic selection of the currently processed cohort, so the existing cohort progress UI updates as labels arrive.
+- AI-generated labels are written into the same editable label state as manual labels; authors can review/edit them before Create SVA.
+- Added cancellation support for in-progress AI labeling.
+
+Implementation notes:
+- AI calls are made from the browser using the user's own OpenAI API key.
+- Saved OpenAI credentials are stored only in localStorage in the current browser when the author opts in.

@@ -1,0 +1,12 @@
+Semantic Vega Cohort Labeler v1.20 — preview-tab parser hardening
+
+Fixes:
+- Reworked the SVA Artifact Inspector/Preview tab so the full SVA payload is stored in a non-executing application/json script block instead of being injected as a giant JavaScript object literal.
+- Escaped JSON payloads for HTML script-data contexts, preventing embedded SVG/HTML-like strings from being interpreted by the browser parser.
+- Hardened generated embed snippets and package index generation so filenames are inserted through JSON.stringify rather than raw string interpolation.
+- Kept the previous runtime rehydration behaviour and download options intact.
+
+Validation:
+- npm install completed.
+- npx tsc --noEmit passed.
+- npm run build passed and regenerated dist/.

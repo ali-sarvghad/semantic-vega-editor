@@ -1,0 +1,14 @@
+Semantic Vega Editor v1.24 — SVA generation gating and export UI cleanup
+
+Changes:
+- Create SVA is now gated by labeling completeness. The action does not generate an SVA while any authorable cohort is unlabeled.
+- Download SVA is also gated by labeling completeness, preventing export of incomplete artifacts.
+- Attempting either action with incomplete labels shows: "There are [x] cohorts that require labeling before Semantic Vega Artifact (SVA) can be generated."
+- Create SVA button updated to #0db39e.
+- Removed the Export focus SVG button from the visualization toolbar.
+- Removed the Full SSVG and Export SSVG buttons from the bottom-right status bar.
+
+Validation:
+- Patched source and built bundle.
+- node --check passed on the built JavaScript bundle.
+- Full npm build could not be rerun in this environment because npm registry downloads repeatedly failed with EAI_AGAIN; the distributed bundle was patched directly and syntax-checked.

@@ -1,0 +1,13 @@
+Semantic Vega v1.22 — Preview/export unification
+
+Root cause addressed:
+- The SVA JSON is valid; the recurring SyntaxError came from the separate preview/inspector page logic.
+- The preview/inspector page maintained its own HTML/JavaScript string-generation path for secondary downloads, which was fragile for large SVA payloads and SVG/runtime strings.
+
+Fix:
+- The Create SVA popup now opens the same embeddable HTML page produced by Download SVA → Embeddable HTML page.
+- This removes the separate inspector rendering path from the preview flow and makes preview a direct test of the exported HTML output.
+- The toolbar still provides SVA JSON, embeddable HTML, and web embed package downloads.
+
+Validation:
+- npm run build passes.

@@ -1,0 +1,23 @@
+Semantic Vega Editor v1.28 — Rendered-semantics cohort policy
+
+Purpose
+- Reduces SVA/SSVG bloat by avoiding normal cohort creation for elements that do not render visible ink.
+- Aligns cohorting with the goal of post-production personalization: author labels should target visible, perceivable, editable visualization parts.
+
+Changes
+- Non-rendering mark buckets are no longer materialized as normal authorable cohorts.
+- Permanently invisible scenegraph residue is excluded from cohort labeling and from CompactVEM cohort rows.
+- Interaction-dependent hidden elements are retained as compact latent metadata instead of full labeled cohorts.
+- Zero-length / no-geometry axis tick residue is excluded from normal cohorting and summarized only as latent metadata.
+- Generated SSVG metadata now includes a renderedSemanticsPolicy statement and, when relevant, a latentNonRendering metadata block.
+- Generated SVG root records p3-latent-nonrendering-count when latent non-rendering summaries exist.
+
+Policy
+- Visible, perceivable, editable SVG elements become normal cohorts.
+- Container-only hierarchy such as whole axes/legends remains structural metadata.
+- Non-rendered elements are not author labeling targets.
+- Conditional/interaction-driven invisible content is preserved compactly for awareness, not expanded into SSVG/VEM cohorts.
+
+Validation
+- npm install completed successfully.
+- npm run build completed successfully.

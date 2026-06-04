@@ -1,0 +1,12 @@
+Semantic Vega Editor v1.27 — AI labeling flow polish
+
+Changes
+- Start AI Labeling now closes the setup dialog immediately and runs labeling in the main cohort labeling view.
+- Label with AI skips the setup dialog when a saved OpenAI API key and selected model are available in local browser storage.
+- AI labeling progress is reflected through the existing cohort progress bar as generated labels arrive.
+- AI progress/status is also written to the editor render status for traceability.
+- The relative dataset URL rewrite notice is hidden while cohort labeling is active so it no longer covers generated/editable labels.
+
+Validation
+- npm install completed successfully in the sandbox.
+- npm run build completed successfully.

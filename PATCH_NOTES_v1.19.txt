@@ -1,0 +1,10 @@
+Semantic Vega v1.19 preview-tab hotfix
+
+Fixed:
+- Preview/inspector tab JavaScript syntax errors caused by raw </script> sequences inside HTML strings embedded in an inline parent <script>.
+- Broken generated web package index where the SVA filename could leak as the literal text "' + filename + '" after the parent script was prematurely closed.
+- Web package filename insertion now uses JSON.stringify(filename), so filenames are emitted as valid JavaScript strings.
+
+Validation:
+- npm install completed.
+- npm run build completed successfully.

@@ -1,0 +1,6 @@
+# Semantic Vega Editor v1.25
+
+- Changed incomplete-label gating feedback from an in-page bottom-panel error to a browser popup.
+- Create SVA and Download SVA still remain blocked when authorable cohorts are unlabeled.
+- The warning no longer switches the bottom panel to Problems/Cohorts or hides the cohort thumbnails.
+- Message shown: "There are [x] cohorts that require labeling before Semantic Vega Artifact (SVA) can be generated."

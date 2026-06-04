@@ -1,0 +1,9 @@
+Semantic Vega Editor v1.23
+
+Changes:
+- Renamed the app UI/project identity from "Semantic Vega Cohort Labeler" to "Semantic Vega Editor".
+- Added ink-aware cohort visibility classification for SVG-derived cohorts.
+- Invisible symbol/mark cohorts with drawable geometry but no visible ink are no longer shown in the manual labeling queue unless the Vega spec suggests interaction-driven visual reveal.
+- Permanent invisible tooltip/hit-target marks are preserved in SSVG and metadata with auto-derived attributes, including p3-visibility-mode and p3-interaction-role.
+- Conditional/interaction-revealed invisible marks are retained as authorable cohorts when the Vega spec includes hover/signal/test-driven visual channels.
+- Zero-length/non-ink structural placeholders continue to be hidden from author labeling but retained for compiler metadata where useful.

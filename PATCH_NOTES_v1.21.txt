@@ -1,0 +1,13 @@
+Semantic Vega v1.21 — preview/export parser hardening
+
+Fixes:
+- Replaced the remaining JSON-in-script export path with base64-in-textarea storage.
+- The inspector preview and single-file HTML export now decode the SVA via TextDecoder before JSON.parse.
+- This avoids browser parser failures caused by very large SVG/JSON payloads, embedded metadata, or any accidental script-closing/tokenization edge case.
+- Kept the web embed package path unchanged except for retaining safe filename stringification.
+
+Validation:
+- npm install completed.
+- npm run build completed successfully.
+- Built production bundle passes node --check on the generated app JavaScript.
+- A repaired sample export was generated as semantic-vega-spec-v1.21-base64-preview.html and its inline scripts pass node --check.

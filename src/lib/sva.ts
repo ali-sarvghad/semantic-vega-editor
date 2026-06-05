@@ -764,6 +764,59 @@ const SEMANTIC_VEGA_RUNTIME = String.raw`
     });
     return count;
   }
+  function normalizeSvgPaintUrlReferences(svg) {
+    if (!svg) return;
+    var localPaintIds = {};
+    Array.prototype.forEach.call(svg.querySelectorAll('linearGradient[id], radialGradient[id], pattern[id]'), function (el) {
+      var id = el.getAttribute('id');
+      if (id) localPaintIds[id] = true;
+    });
+    function hasPaintIds() {
+      for (var key in localPaintIds) return true;
+      return false;
+    }
+    if (!hasPaintIds()) return;
+    function extractUrlRefId(value) {
+      if (!value) return null;
+      var match = String(value).match(/url\(\s*['"]?[^)]*#([^)'"\s]+)['"]?\s*\)/);
+      return match && match[1] ? match[1] : null;
+    }
+    function hasLocalPaintRef(value) {
+      var id = extractUrlRefId(value);
+      return !!(id && localPaintIds[id]);
+    }
+    function normalizePaintRef(value) {
+      if (!value) return value;
+      return String(value).replace(/url\(\s*['"]?[^)]*#([^)'"\s]+)['"]?\s*\)/g, function (full, id) {
+        return localPaintIds[id] ? 'url(#' + id + ')' : full;
+      });
+    }
+    function syncPaintPair(el, svgAttr, p3Attr) {
+      var currentSvg = el.getAttribute(svgAttr);
+      var normalizedSvg = normalizePaintRef(currentSvg);
+      if (normalizedSvg && normalizedSvg !== currentSvg) el.setAttribute(svgAttr, normalizedSvg);
+      var currentP3 = el.getAttribute(p3Attr);
+      var normalizedP3 = normalizePaintRef(currentP3);
+      if (normalizedP3 && normalizedP3 !== currentP3) el.setAttribute(p3Attr, normalizedP3);
+      var finalSvg = el.getAttribute(svgAttr);
+      var finalP3 = el.getAttribute(p3Attr);
+      if (hasLocalPaintRef(finalSvg) && !hasLocalPaintRef(finalP3) && finalSvg) {
+        el.setAttribute(p3Attr, finalSvg);
+      }
+    }
+    Array.prototype.forEach.call(svg.querySelectorAll('*'), function (el) {
+      ['filter', 'clip-path', 'mask'].forEach(function (attr) {
+        var current = el.getAttribute(attr);
+        var normalized = normalizePaintRef(current);
+        if (normalized && normalized !== current) el.setAttribute(attr, normalized);
+      });
+      syncPaintPair(el, 'fill', 'p3-paint-fill');
+      syncPaintPair(el, 'stroke', 'p3-paint-stroke');
+      var style = el.getAttribute('style');
+      var normalizedStyle = normalizePaintRef(style);
+      if (normalizedStyle && normalizedStyle !== style) el.setAttribute('style', normalizedStyle);
+    });
+  }
   function ensureMetadata(svg, metadataJson) {
     if (!svg || !metadataJson || svg.querySelector('metadata[p3-kind="ssvg-metadata"]')) return;
     var metadata = document.createElementNS('http://www.w3.org/2000/svg', 'metadata');
@@ -793,6 +846,7 @@ const SEMANTIC_VEGA_RUNTIME = String.raw`
     var containerResult = applyEntries(svg, rehydration.containers || []);
     var elementResult = applyEntries(svg, rehydration.elements || []);
     var missed = containerResult.missed.concat(elementResult.missed);
+    normalizeSvgPaintUrlReferences(svg);
     svg.setAttribute('p3-live-rehydrated', 'true');
     svg.setAttribute('p3-live-rehydrated-at', new Date().toISOString());
     svg.setAttribute('p3-live-rehydration-missed', String(missed.length));

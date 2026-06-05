@@ -294,29 +294,60 @@ function normalizeSvgPaintUrlReferences(svg: SVGSVGElement) {
   );
   if (!localPaintIds.size) return;
 
+  const extractUrlRefId = (value: string | null): string | null => {
+    if (!value) return null;
+    const match = value.match(/url\(\s*['"]?[^)]*#([^)'"\s]+)['"]?\s*\)/);
+    return match?.[1] || null;
+  };
+
+  const hasLocalPaintRef = (value: string | null): boolean => {
+    const id = extractUrlRefId(value);
+    return !!id && localPaintIds.has(id);
+  };
+
   const normalizePaintRef = (value: string | null): string | null => {
     if (!value) return value;
-    return value.replace(/url\((['"]?)([^)'"\s]*#([^)'"\s]+))\1\)/g, (full, _quote, _url, id) => {
+    return value.replace(/url\(\s*['"]?[^)]*#([^)'"\s]+)['"]?\s*\)/g, (full, id) => {
       return localPaintIds.has(id) ? `url(#${id})` : full;
     });
   };
 
+  const syncPaintPair = (el: SVGElement, svgAttr: string, p3Attr: string) => {
+    const currentSvg = el.getAttribute(svgAttr);
+    const normalizedSvg = normalizePaintRef(currentSvg);
+    if (normalizedSvg && normalizedSvg !== currentSvg) el.setAttribute(svgAttr, normalizedSvg);
+
+    const currentP3 = el.getAttribute(p3Attr);
+    const normalizedP3 = normalizePaintRef(currentP3);
+    if (normalizedP3 && normalizedP3 !== currentP3) el.setAttribute(p3Attr, normalizedP3);
+
+    const finalSvg = el.getAttribute(svgAttr);
+    const finalP3 = el.getAttribute(p3Attr);
+    const svgHasLocal = hasLocalPaintRef(finalSvg);
+    const p3HasLocal = hasLocalPaintRef(finalP3);
+
+    // The actual SVG paint is the rendering source of truth. If the semantic
+    // paint attribute points at a missing gradient id, synchronize it to the
+    // normalized local SVG paint. This prevents states such as
+    // fill="url(#gradient_0)" but p3-paint-fill="url(#gradient_2)".
+    if (svgHasLocal && !p3HasLocal && finalSvg) {
+      el.setAttribute(p3Attr, finalSvg);
+    }
+  };
+
   svg.querySelectorAll<SVGElement>('*').forEach((el) => {
-    ['fill', 'stroke', 'filter', 'clip-path', 'mask'].forEach((attr) => {
+    ['filter', 'clip-path', 'mask'].forEach((attr) => {
       const current = el.getAttribute(attr);
       const normalized = normalizePaintRef(current);
       if (normalized && normalized !== current) el.setAttribute(attr, normalized);
     });
+
+    syncPaintPair(el, 'fill', 'p3-paint-fill');
+    syncPaintPair(el, 'stroke', 'p3-paint-stroke');
 
     const style = el.getAttribute('style');
     const normalizedStyle = normalizePaintRef(style);
     if (normalizedStyle && normalizedStyle !== style) el.setAttribute('style', normalizedStyle);
-
-    ['p3-paint-fill', 'p3-paint-stroke'].forEach((attr) => {
-      const current = el.getAttribute(attr);
-      const normalized = normalizePaintRef(current);
-      if (normalized && normalized !== current) el.setAttribute(attr, normalized);
-    });
   });
 }
 
@@ -1805,6 +1836,7 @@ export function compileCohortSsvg(sourceSvg: string, cohorts: VisualCohort[], la
     });
   });
 
+  normalizeSvgPaintUrlReferences(svg);
   metadata.ssvgReadiness = validateLeanSsvgReadiness(svg, cohorts, labels);
   metadataEl.textContent = JSON.stringify(metadata, null, 2);
 

@@ -1,0 +1,7 @@
+Semantic Vega Editor v1.38 — Portable Gradient Rehydration Fix
+
+- Strengthened SVG gradient normalization so blob/document paint URLs are rewritten to local url(#gradient_id) references.
+- Synchronizes p3-paint-fill / p3-paint-stroke with the actual SVG fill/stroke when the semantic paint attribute points to a missing gradient id.
+- Re-runs gradient normalization after cohort annotation, ensuring exported SSVG is internally consistent.
+- Updates the SVA runtime rehydration path to normalize live Vega-rendered SVG gradient fills after semantic attributes are reapplied.
+- Fixes cases where a plugin-captured live SSVG preserved fill="url(blob:...#gradient_0)" while p3-paint-fill pointed to a non-existent gradient id.

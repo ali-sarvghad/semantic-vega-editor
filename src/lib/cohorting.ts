@@ -1388,7 +1388,7 @@ function buildNativeCompactVem(svg: SVGSVGElement, cohorts: VisualCohort[], labe
   };
 }
 
-function validateP3VemReadiness(svg: SVGSVGElement, compactVem: ReturnType<typeof buildNativeCompactVem>) {
+function validateLeanSsvgReadiness(svg: SVGSVGElement, cohorts: VisualCohort[], labels: CohortLabels) {
   const editable = Array.from(svg.querySelectorAll('[p3-cohort-id]')) as SVGElement[];
   const required = ['p3-element-id', 'p3-cohort-id', 'p3-viz-part', 'p3-data-role', 'p3-mark', 'p3-shapeDescriptor'];
   const missingCounts: Record<string, number> = {};
@@ -1399,19 +1399,24 @@ function validateP3VemReadiness(svg: SVGSVGElement, compactVem: ReturnType<typeo
   });
   const roleMissing = editable.filter((el) => !el.getAttribute('p3-role')).length;
   if (roleMissing) missingCounts['p3-role'] = roleMissing;
+
   const selectorFailures: string[] = [];
-  compactVem.cohorts.forEach((cohort) => {
-    const selector = cohort.targeting.primary_selector;
-    if (!selector) {
-      selectorFailures.push(`${cohort.source_cohort_id}: missing primary selector`);
-      return;
-    }
-    try {
-      if (!svg.querySelectorAll(selector).length) selectorFailures.push(`${cohort.source_cohort_id}: primary selector matched no elements`);
-    } catch {
-      selectorFailures.push(`${cohort.source_cohort_id}: primary selector is invalid`);
-    }
-  });
+  cohorts
+    .filter((cohort) => cohort.containerOnly !== true && (cohort.authorable !== false || cohort.writeCompilerAttributes === true))
+    .forEach((cohort) => {
+      const role = cohort.authorable === false ? '' : (labels[cohort.id]?.role || '');
+      const selector = buildCohortTargeting(cohort, role).primarySelector;
+      if (!selector) {
+        selectorFailures.push(`${cohort.id}: missing primary selector`);
+        return;
+      }
+      try {
+        if (!svg.querySelectorAll(selector).length) selectorFailures.push(`${cohort.id}: primary selector matched no elements`);
+      } catch {
+        selectorFailures.push(`${cohort.id}: primary selector is invalid`);
+      }
+    });
+
   const warnings = [
     ...Object.entries(missingCounts).map(([attr, count]) => `${count} editable element(s) missing ${attr}`),
     ...selectorFailures
@@ -1419,7 +1424,7 @@ function validateP3VemReadiness(svg: SVGSVGElement, compactVem: ReturnType<typeo
   return {
     ready: warnings.length === 0,
     checkedElementCount: editable.length,
-    checkedCohortCount: compactVem.cohorts.length,
+    checkedCohortCount: cohorts.filter((cohort) => cohort.containerOnly !== true && (cohort.authorable !== false || cohort.writeCompilerAttributes === true)).length,
     requiredElementAttributes: required.concat('p3-role'),
     missingAttributeCounts: missingCounts,
     selectorFailures,
@@ -1570,7 +1575,7 @@ export function extractElementDataAnnotations(svg: SVGSVGElement, view: unknown,
 export function compileCohortSsvg(sourceSvg: string, cohorts: VisualCohort[], labels: CohortLabels, specKind: string, dataAnnotations: ElementDataAnnotations = {}): string {
   const doc = new DOMParser().parseFromString(sourceSvg, 'image/svg+xml');
   const svg = doc.documentElement as unknown as SVGSVGElement;
-  svg.setAttribute('p3-ssvg-version', '0.5-cohort-authored');
+  svg.setAttribute('p3-ssvg-version', '0.6-lean-cohort-authored');
   svg.setAttribute('p3-source', 'semantic-vega-editor');
   svg.setAttribute('p3-authoring-mode', 'author-labeled-rendered-cohorts');
   svg.setAttribute('p3-spec-kind', specKind);
@@ -1579,7 +1584,7 @@ export function compileCohortSsvg(sourceSvg: string, cohorts: VisualCohort[], la
   if (latentNonRendering?.count != null) svg.setAttribute('p3-latent-nonrendering-count', String(latentNonRendering.count));
 
   const metadata: any = {
-    ssvgVersion: '0.5-cohort-authored',
+    ssvgVersion: '0.6-lean-cohort-authored',
     source: 'Semantic Vega Editor',
     semanticPolicy: {
       authorAuthority: 'Author labels rendered visual cohorts directly. No spec-side semantic metadata is required in the Vega/Vega-Lite spec.',
@@ -1590,32 +1595,39 @@ export function compileCohortSsvg(sourceSvg: string, cohorts: VisualCohort[], la
     specKind,
     p3VemCompatibility: {
       compactVemReady: true,
+      compactVemEmbedded: false,
       schemaPhase: 6,
       selectorBasis: 'p3-cohort-id + p3-element-id',
       roleField: 'p3-role',
       vizPartField: 'p3-viz-part',
       dataRoleField: 'p3-data-role',
+      dataValueField: 'p3-data-value',
+      encodingChannelField: 'p3-data-encoding-channel',
       paintFieldPrefix: 'p3-paint-*',
       containerPolicy: 'container-only hierarchy: non-renderable groups never receive p3-role or p3-viz-part',
-      nativeCompactVemEmbedded: true,
-      validationEmbedded: true
+      recommendedConsumerAction: 'Generate CompactVEM from the live SSVG DOM after loading. Treat SSVG DOM attributes as the source of semantic truth.'
     },
     latentNonRendering: readLatentNonRenderingMetadata(svg),
-    containers: buildContainerHierarchy(cohorts),
+    containers: buildContainerHierarchy(cohorts).map((container) => ({
+      containerId: container.containerId,
+      kind: container.kind,
+      title: container.title,
+      rootElementIds: container.rootElementIds,
+      childCohortIds: container.childCohortIds,
+      parentContainerId: container.parentContainerId,
+      targeting: container.targeting
+    })),
     cohorts: cohorts.map((cohort) => {
       const role = cohort.authorable === false ? '' : (labels[cohort.id]?.role || '');
-      const elements = renderableElementsForCohort(svg, cohort);
       const vizPart = inferCohortVizPart(cohort);
       const dataRole = inferP3DataRole(cohort, role);
       return {
         cohortId: cohort.id,
         type: cohort.type,
         title: cohort.title,
-        suggestedRole: cohort.suggestedRole,
         role,
         roleSource: cohort.authorable === false || !role ? null : 'author',
         memberCount: cohort.count,
-        evidence: cohort.evidence,
         authorable: cohort.authorable !== false,
         parentId: cohort.parentId || null,
         childIds: cohort.childIds || [],
@@ -1625,14 +1637,9 @@ export function compileCohortSsvg(sourceSvg: string, cohorts: VisualCohort[], la
         dataRole,
         targeting: buildCohortTargeting(cohort, role),
         representativeElementIds: cohortRepresentativeElementIds(cohort),
-        styleSummary: summarizePaintValues(elements),
-        geometrySummary: summarizeGeometry(elements),
-        textSummary: summarizeTextValues(elements),
-        dataSummary: summarizeDataForCohort(cohort, dataAnnotations),
         renderStatus: cohort.renderStatus || 'visible',
         visibilityMode: cohort.visibilityMode || 'visible-now',
-        interactionRole: cohort.interactionRole || null,
-        authoringReason: cohort.authoringReason || null
+        interactionRole: cohort.interactionRole || null
       };
     })
   };
@@ -1708,8 +1715,7 @@ export function compileCohortSsvg(sourceSvg: string, cohorts: VisualCohort[], la
     });
   });
 
-  metadata.compactVem = buildNativeCompactVem(svg, cohorts, labels, dataAnnotations);
-  metadata.p3VemReadiness = validateP3VemReadiness(svg, metadata.compactVem);
+  metadata.ssvgReadiness = validateLeanSsvgReadiness(svg, cohorts, labels);
   metadataEl.textContent = JSON.stringify(metadata, null, 2);
 
   return new XMLSerializer().serializeToString(svg);

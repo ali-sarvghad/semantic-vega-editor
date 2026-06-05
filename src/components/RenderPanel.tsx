@@ -5,6 +5,7 @@ import type { SpecDiagnostics } from '../lib/specAnalysis';
 import { extractDeclaredWidgets, type DeclaredWidget } from '../lib/specWidgets';
 import { normalizeSpecDataUrls } from '../lib/specDataUrls';
 import { compileCohortSsvg, discoverVisualCohorts, extractElementDataAnnotations, renderCohortFocusSvg, type CohortLabels, type VisualCohort, type ElementDataAnnotations } from '../lib/cohorting';
+import type { SemanticVegaProvenanceInput } from '../lib/provenance';
 
 interface RenderPanelProps {
   activeTool: 'render' | 'cohort-labels' | 'ssvg-preview';
@@ -23,7 +24,8 @@ interface RenderPanelProps {
   onLabelChange: (cohortId: string, role: string, position?: { x: number; y: number }) => void;
 }
 
-export function RenderPanel({ activeTool, diagnostics, renderRequest, sourceSvg, cohorts, selectedCohortId, labels, ssvgPreview, labelingMode, onRenderStatus, onCohortsGenerated, onSsvgGenerated, onLabelChange }: RenderPanelProps) {
+
+export function RenderPanel({ activeTool, spec, diagnostics, renderRequest, sourceSvg, cohorts, selectedCohortId, labels, ssvgPreview, labelingMode, onRenderStatus, onCohortsGenerated, onSsvgGenerated, onLabelChange }: RenderPanelProps) {
   if (activeTool === 'ssvg-preview') {
     return <SsvgPreview ssvgPreview={ssvgPreview} />;
   }
@@ -44,11 +46,16 @@ export function RenderPanel({ activeTool, diagnostics, renderRequest, sourceSvg,
       onCohortsGenerated={onCohortsGenerated}
       onSsvgGenerated={onSsvgGenerated}
       onLabelChange={onLabelChange}
+      spec={spec}
     />
   );
 }
 
-function LiveRenderPanel({ diagnostics, renderRequest, sourceSvg, cohorts, selectedCohortId, labels, labelingMode, onRenderStatus, onCohortsGenerated, onSsvgGenerated, onLabelChange }: Omit<RenderPanelProps, 'activeTool' | 'spec' | 'ssvgPreview'>) {
+function safeParseSpecText(specText: string): unknown | undefined {
+  try { return JSON.parse(specText); } catch { return undefined; }
+}
+
+function LiveRenderPanel({ spec, diagnostics, renderRequest, sourceSvg, cohorts, selectedCohortId, labels, labelingMode, onRenderStatus, onCohortsGenerated, onSsvgGenerated, onLabelChange }: Omit<RenderPanelProps, 'activeTool' | 'ssvgPreview'>) {
   const hiddenRenderRef = useRef<HTMLDivElement | null>(null);
   const focusHostRef = useRef<HTMLDivElement | null>(null);
   const panViewportRef = useRef<HTMLDivElement | null>(null);
@@ -62,6 +69,8 @@ function LiveRenderPanel({ diagnostics, renderRequest, sourceSvg, cohorts, selec
   const [dataUrlRewrites, setDataUrlRewrites] = useState<string[]>([]);
   const [labelEditor, setLabelEditor] = useState<{ x: number; y: number; svgX: number; svgY: number; value: string } | null>(null);
   const [dataAnnotations, setDataAnnotations] = useState<ElementDataAnnotations>({});
+  const [compiledVegaSpec, setCompiledVegaSpec] = useState<unknown | null>(null);
+  const [dataUrlRewriteSnapshot, setDataUrlRewriteSnapshot] = useState<string[]>([]);
 
   const renderableSpec = useMemo(() => diagnostics.parsed ?? null, [diagnostics.parsed]);
   const selectedCohort = cohorts.find((cohort) => cohort.id === selectedCohortId) ?? null;
@@ -106,6 +115,7 @@ function LiveRenderPanel({ diagnostics, renderRequest, sourceSvg, cohorts, selec
 
         const normalized = normalizeSpecDataUrls(renderableSpec);
         setDataUrlRewrites(normalized.rewrites);
+        setDataUrlRewriteSnapshot(normalized.rewrites);
 
         const result = await embed(hiddenRenderRef.current, normalized.spec as any, {
           renderer: 'svg',
@@ -143,11 +153,21 @@ function LiveRenderPanel({ diagnostics, renderRequest, sourceSvg, cohorts, selec
           return;
         }
 
-        const discovered = discoverVisualCohorts(svg, (result as any).spec ?? normalized.spec);
-        const annotations = extractElementDataAnnotations(svg, result.view, (result as any).spec ?? normalized.spec);
+        const runtimeSpec = (result as any).spec ?? normalized.spec;
+        setCompiledVegaSpec(runtimeSpec);
+        const discovered = discoverVisualCohorts(svg, runtimeSpec);
+        const annotations = extractElementDataAnnotations(svg, result.view, runtimeSpec);
         setDataAnnotations(annotations);
         onCohortsGenerated(discovered);
-        const compiled = compileCohortSsvg(discovered.sourceSvg, discovered.cohorts, {}, diagnostics.kind, annotations);
+        const provenance: SemanticVegaProvenanceInput = {
+          sourceSpecType: diagnostics.kind,
+          sourceSpec: renderableSpec,
+          normalizedSpec: normalized.spec,
+          compiledVegaSpec: runtimeSpec,
+          dataUrlRewrites: normalized.rewrites,
+          editorVersion: '1.40'
+        };
+        const compiled = compileCohortSsvg(discovered.sourceSvg, discovered.cohorts, {}, diagnostics.kind, annotations, provenance);
         onSsvgGenerated(compiled);
         const authorableCount = discovered.cohorts.filter((cohort) => cohort.authorable !== false).length;
         const message = `Rendered successfully. Computed ${authorableCount} authorable cohort(s) behind the scenes (${discovered.cohorts.length} structural cohort(s) total). Inspect the visualization, then press Label.`;
@@ -167,9 +187,17 @@ function LiveRenderPanel({ diagnostics, renderRequest, sourceSvg, cohorts, selec
 
   useEffect(() => {
     if (!sourceSvg) return;
-    const compiled = compileCohortSsvg(sourceSvg, cohorts, labels, diagnostics.kind, dataAnnotations);
+    const provenance: SemanticVegaProvenanceInput = {
+      sourceSpecType: diagnostics.kind,
+      sourceSpec: diagnostics.parsed ?? safeParseSpecText(spec),
+      normalizedSpec: diagnostics.parsed ? normalizeSpecDataUrls(diagnostics.parsed).spec : undefined,
+      compiledVegaSpec,
+      dataUrlRewrites: dataUrlRewriteSnapshot,
+      editorVersion: '1.40'
+    };
+    const compiled = compileCohortSsvg(sourceSvg, cohorts, labels, diagnostics.kind, dataAnnotations, provenance);
     onSsvgGenerated(compiled);
-  }, [sourceSvg, cohorts, labels, diagnostics.kind, dataAnnotations, onSsvgGenerated]);
+  }, [sourceSvg, cohorts, labels, diagnostics.kind, diagnostics.parsed, spec, dataAnnotations, compiledVegaSpec, dataUrlRewriteSnapshot, onSsvgGenerated]);
 
   function openLabelEditorFromClick(event: React.MouseEvent<HTMLDivElement>) {
     if (!selectedCohort) return;

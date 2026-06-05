@@ -2,6 +2,7 @@ import * as vegaLite from 'vega-lite';
 import type { CohortLabels, VisualCohort } from './cohorting';
 import type { SpecKind } from './specAnalysis';
 import { normalizeSpecDataUrls } from './specDataUrls';
+import { buildSemanticVegaProvenanceMetadata, type SemanticVegaProvenanceMetadata } from './provenance';
 
 export interface SvaRehydrationEntry {
   semanticElementId: string | null;
@@ -80,6 +81,7 @@ export interface SemanticVegaArtifact {
       warnings: string[];
     };
   };
+  provenance: SemanticVegaProvenanceMetadata;
   interactions: {
     params: unknown[];
     signals: unknown[];
@@ -409,6 +411,15 @@ export function createSemanticVegaArtifact(input: CreateSvaInput): SemanticVegaA
   const compiled = compileSpec(input.kind, normalizedSpec);
   const filename = semanticVegaArtifactFilename(input.title);
   const rehydration = createRehydrationFromSsvg(input.ssvg);
+  const provenance = buildSemanticVegaProvenanceMetadata({
+    sourceSpecType: input.kind,
+    sourceSpec,
+    normalizedSpec,
+    compiledVegaSpec: compiled.spec,
+    dataUrlRewrites: normalized.rewrites,
+    editorVersion: '1.40',
+    artifactTitle: input.title
+  });
 
   return {
     artifactType: 'semantic-vega-artifact',
@@ -453,6 +464,7 @@ export function createSemanticVegaArtifact(input: CreateSvaInput): SemanticVegaA
       labels: input.labels
     },
     rehydration,
+    provenance,
     interactions: {
       params,
       signals,

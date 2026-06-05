@@ -1,3 +1,5 @@
+import { buildSemanticVegaProvenanceMetadata, type SemanticVegaProvenanceInput } from './provenance';
+
 export type CohortType =
   | 'data-mark'
   | 'axis'
@@ -1691,7 +1693,7 @@ export function extractElementDataAnnotations(svg: SVGSVGElement, view: unknown,
   return annotations;
 }
 
-export function compileCohortSsvg(sourceSvg: string, cohorts: VisualCohort[], labels: CohortLabels, specKind: string, dataAnnotations: ElementDataAnnotations = {}): string {
+export function compileCohortSsvg(sourceSvg: string, cohorts: VisualCohort[], labels: CohortLabels, specKind: string, dataAnnotations: ElementDataAnnotations = {}, provenanceInput?: SemanticVegaProvenanceInput): string {
   const doc = new DOMParser().parseFromString(sourceSvg, 'image/svg+xml');
   const svg = doc.documentElement as unknown as SVGSVGElement;
   normalizeSvgPaintUrlReferences(svg);
@@ -1729,6 +1731,7 @@ export function compileCohortSsvg(sourceSvg: string, cohorts: VisualCohort[], la
       recommendedConsumerAction: 'Generate CompactVEM from the live SSVG DOM after loading. Treat SSVG DOM attributes as the source of semantic truth.'
     },
     latentNonRendering: readLatentNonRenderingMetadata(svg),
+    provenance: provenanceInput ? buildSemanticVegaProvenanceMetadata({ ...provenanceInput, sourceSpecType: provenanceInput.sourceSpecType || specKind }) : null,
     containers: buildContainerHierarchy(cohorts).map((container) => ({
       containerId: container.containerId,
       kind: container.kind,
@@ -1772,6 +1775,16 @@ export function compileCohortSsvg(sourceSvg: string, cohorts: VisualCohort[], la
   metadataEl.setAttribute('type', 'application/json');
   metadataEl.textContent = JSON.stringify(metadata, null, 2);
   svg.insertBefore(metadataEl, svg.firstChild);
+
+  svg.querySelector('metadata[p3-kind="semantic-vega-provenance"]')?.remove();
+  if (metadata.provenance) {
+    const provenanceEl = doc.createElementNS(SVG_NS, 'metadata');
+    provenanceEl.setAttribute('p3-kind', 'semantic-vega-provenance');
+    provenanceEl.setAttribute('type', 'application/json');
+    provenanceEl.setAttribute('data-format', 'json-with-base64-spec-values');
+    provenanceEl.textContent = JSON.stringify(metadata.provenance, null, 2);
+    svg.insertBefore(provenanceEl, svg.firstChild);
+  }
 
   cohorts.forEach((cohort) => {
     // Container cohorts (whole axes/legends/legend entries) are hierarchy metadata only.

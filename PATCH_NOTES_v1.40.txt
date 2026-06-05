@@ -1,0 +1,16 @@
+Semantic Vega Editor v1.40 — Embedded provenance specifications
+
+This update makes exported Semantic Vega artifacts self-contained for post-production recovery.
+
+Changes:
+- SSVG export now includes a dedicated <metadata p3-kind="semantic-vega-provenance"> block.
+- The provenance block can carry the original source spec, normalized source spec, and compiled Vega spec as base64-encoded JSON.
+- A size guard prevents very large inline-data specs from bloating the SSVG; oversized specs retain byte length, hash, and omission reason.
+- The main SSVG metadata also references the same provenance object for easier programmatic access.
+- SVA JSON now includes a top-level provenance object in addition to existing source and compiled sections.
+- Standalone HTML and web-embed package exports inherit this provenance because they embed the SVA JSON.
+- Added helper functions in src/lib/provenance.ts for building and recovering embedded provenance.
+
+Consumer note:
+- Post-production tools can recover included specs by reading metadata[p3-kind="semantic-vega-provenance"], parsing JSON, and decoding specs[*].valueBase64 as UTF-8 JSON.
+- For interactive reconstruction, consumers should prefer compiledVegaSpec, then normalizedSpec, then sourceSpec.

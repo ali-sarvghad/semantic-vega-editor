@@ -1,0 +1,8 @@
+Semantic Vega Editor v1.36
+
+- Fixed portable rendering of continuous legend gradients in exported SSVG.
+- Normalizes gradient paint references such as url(blob:...#gradient_0) to local url(#gradient_0) references during cohort discovery and SSVG export.
+- Preserves local SVG <defs><linearGradient> definitions as the authoritative gradient source.
+- Adds continuous legend ramps as first-class renderable cohorts with type `legend-gradient` and p3-viz-part `legend-color-ramp`.
+- Adds legend-gradient cohorts to legend container child metadata, so downstream tools such as P3-VEM can target, explain, and manipulate color ramps.
+- Keeps the lean SSVG architecture: P3-VEM should still generate CompactVEM from the live SSVG DOM after import.

@@ -23,7 +23,7 @@ import { CodeEditor } from './components/CodeEditor';
 import { RenderPanel } from './components/RenderPanel';
 import { BottomPanel } from './components/BottomPanel';
 import { buildStandaloneSvaHtml, createSemanticVegaArtifact, downloadSvaByKind, semanticVegaArtifactFilename, type SvaDownloadKind } from './lib/sva';
-import { fetchOpenAiModels, labelCohortWithOpenAi, type OpenAiModelInfo } from './lib/openAiLabeling';
+import { fetchOpenAiModels, labelCohortWithOpenAiResilient, type OpenAiModelInfo } from './lib/openAiLabeling';
 
 function nowLabel() {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -768,7 +768,7 @@ export function App() {
           showBottom: true,
           renderStatus: { ok: true, message: progressMessage, renderedAt: nowLabel() }
         });
-        const label = await labelCohortWithOpenAi({
+        const result = await labelCohortWithOpenAiResilient({
           apiKey,
           model,
           sourceSvg: activeTab.sourceSvg,
@@ -777,9 +777,15 @@ export function App() {
           chartKind: diagnostics.kind,
           specText: activeTab.spec,
           signal: controller.signal
-        });
+        }, 2);
+        const label = result.label;
         completed += 1;
         setAiProgress({ done: completed, total: cohortsToLabel.length });
+        if (result.source === 'local-fallback') {
+          const fallbackMessage = `AI request failed for ${cohort.title}; used local fallback label “${label}”. Continuing…`;
+          setAiStatus(fallbackMessage);
+          updateActiveTab({ renderStatus: { ok: true, message: fallbackMessage, renderedAt: nowLabel() } });
+        }
         setTabs((currentTabs) => currentTabs.map((tab) => {
           if (tab.id !== activeTabId) return tab;
           return {
@@ -800,7 +806,7 @@ export function App() {
         }));
       }
       if (!controller.signal.aborted) {
-        const completeMessage = 'AI labeling complete. Review and edit the labels as needed, then press Create SVA.';
+        const completeMessage = 'AI labeling complete. Review and edit the labels as needed, then press Create SVA. If an API call failed, a local fallback label was used so no cohort is left empty.';
         setAiStatus(completeMessage);
         updateActiveTab({ renderStatus: { ok: true, message: completeMessage, renderedAt: nowLabel() }, activeBottomTab: 'cohorts', showBottom: true });
       }

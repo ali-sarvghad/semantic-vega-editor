@@ -1,0 +1,12 @@
+# Semantic Vega Editor v1.35
+
+AI labeling resilience update.
+
+- Added a deterministic local fallback labeler for cohorts when an OpenAI request fails.
+- Added retry handling for transient AI labeling failures, including browser/CORS/network-style failures.
+- Updated the AI labeling loop so one failed cohort no longer stops the whole run.
+- Successful model-generated labels are preserved.
+- Failed cohorts receive a local semantic fallback label derived from cohort type, suggested role, title, and evidence.
+- The final AI labeling message now explains that fallback labels may have been used and should be reviewed.
+
+This does not make browser-side CORS disappear; instead, it prevents CORS/network failures from leaving the final cohorts unlabeled.

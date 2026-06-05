@@ -11,6 +11,7 @@ export type CohortType =
   | 'legend-symbols'
   | 'legend-labels'
   | 'legend-title'
+  | 'legend-gradient'
   | 'text-label'
   | 'facet-panel'
   | 'title'
@@ -282,6 +283,60 @@ function ensureElementIds(svg: SVGSVGElement) {
       i += 1;
     }
   });
+}
+
+
+function normalizeSvgPaintUrlReferences(svg: SVGSVGElement) {
+  const localPaintIds = new Set(
+    Array.from(svg.querySelectorAll('linearGradient[id], radialGradient[id], pattern[id]'))
+      .map((el) => el.getAttribute('id') || '')
+      .filter(Boolean)
+  );
+  if (!localPaintIds.size) return;
+
+  const normalizePaintRef = (value: string | null): string | null => {
+    if (!value) return value;
+    return value.replace(/url\((['"]?)([^)'"\s]*#([^)'"\s]+))\1\)/g, (full, _quote, _url, id) => {
+      return localPaintIds.has(id) ? `url(#${id})` : full;
+    });
+  };
+
+  svg.querySelectorAll<SVGElement>('*').forEach((el) => {
+    ['fill', 'stroke', 'filter', 'clip-path', 'mask'].forEach((attr) => {
+      const current = el.getAttribute(attr);
+      const normalized = normalizePaintRef(current);
+      if (normalized && normalized !== current) el.setAttribute(attr, normalized);
+    });
+
+    const style = el.getAttribute('style');
+    const normalizedStyle = normalizePaintRef(style);
+    if (normalizedStyle && normalizedStyle !== style) el.setAttribute('style', normalizedStyle);
+
+    ['p3-paint-fill', 'p3-paint-stroke'].forEach((attr) => {
+      const current = el.getAttribute(attr);
+      const normalized = normalizePaintRef(current);
+      if (normalized && normalized !== current) el.setAttribute(attr, normalized);
+    });
+  });
+}
+
+function legendGradientRole(legend: Element, index: number): string {
+  const titleEl = legend.querySelector('.role-legend-title');
+  const title = titleEl ? visibleText(titleEl) : '';
+  if (title) return `legend color ramp for ${title.toLowerCase()}`;
+  const aria = legend.getAttribute('aria-label') || '';
+  if (aria) return `legend color ramp for ${aria.toLowerCase()}`;
+  return `legend color ramp ${index + 1}`;
+}
+
+function legendGradientCandidates(legend: Element): Element[] {
+  const candidates = new Set<Element>();
+  legend.querySelectorAll('.role-legend-gradient, [class*="role-legend-gradient"]').forEach((el) => candidates.add(el));
+  legend.querySelectorAll('.role-legend-gradient path, .role-legend-gradient rect, .role-legend-gradient image, [class*="role-legend-gradient"] path, [class*="role-legend-gradient"] rect, [class*="role-legend-gradient"] image').forEach((el) => candidates.add(el));
+  legend.querySelectorAll('[fill^="url(#"], [stroke^="url(#"]]').forEach((el) => {
+    if (closestRoleBoundary(el) === 'legend') candidates.add(el);
+  });
+  return Array.from(candidates);
 }
 
 function titleFromAxis(axis: Element, index: number) {
@@ -809,6 +864,7 @@ function readLatentNonRenderingMetadata(svg: SVGSVGElement): unknown | null {
 
 export function discoverVisualCohorts(svg: SVGSVGElement, compiledSpec?: unknown): { sourceSvg: string; cohorts: VisualCohort[] } {
   ensureElementIds(svg);
+  normalizeSvgPaintUrlReferences(svg);
   const interactionInfo = collectMarkInteractionVisibilityInfo(compiledSpec);
   const cohorts: Omit<VisualCohort, 'thumbnailSvg'>[] = [];
   const latentNonRendering: LatentNonRenderingElementSummary[] = [];
@@ -885,6 +941,29 @@ export function discoverVisualCohorts(svg: SVGSVGElement, compiledSpec?: unknown
     const aria = legend.getAttribute('aria-label') || '';
     const ids = getRenderableIds(legend);
     const childIds: string[] = [];
+
+    const gradientEls = legendGradientCandidates(legend);
+    const gradientIds = Array.from(new Set(gradientEls.flatMap((el) => getRenderableIds(el))));
+    if (gradientIds.length > 0) {
+      const childId = `cohort_legend-gradient_${index}_${safeSlug(rootId)}`;
+      childIds.push(childId);
+      addCohort(cohorts, seen, svg, {
+        id: childId,
+        title: `legend color ramp · legend ${index + 1}`,
+        type: 'legend-gradient',
+        suggestedRole: legendGradientRole(legend, index),
+        evidence: `Continuous SVG gradient/color-ramp subcohort inside legend ${index + 1}; fill/stroke URL references are normalized to local SVG defs for portability.`,
+        elementIds: gradientIds,
+        rootIds: gradientEls.map((el) => el.getAttribute('p3-element-id') || '').filter(Boolean),
+        count: gradientIds.length,
+        authorable: true,
+        containerOnly: false,
+        parentId: legendId,
+        renderStatus: 'visible',
+        visibilityMode: 'visible-now',
+        interactionRole: 'none'
+      });
+    }
 
     const legendParts: Array<[string, CohortType, string, string, boolean]> = [
       ['.role-legend-entry', 'legend-entry', 'legend entries', 'legend-entry', false],
@@ -1024,6 +1103,7 @@ export function renderCohortFocusSvg(sourceSvg: string, cohort: VisualCohort | n
   if (!cohort) return sourceSvg;
   const doc = new DOMParser().parseFromString(sourceSvg, 'image/svg+xml');
   const svg = doc.documentElement as unknown as SVGSVGElement;
+  normalizeSvgPaintUrlReferences(svg);
   return buildHighlightedSvg(svg, cohort.elementIds, labels[cohort.id], false, cohort.overlaySpec);
 }
 
@@ -1073,6 +1153,7 @@ function inferP3ShapeDescriptor(el: Element, cohort: VisualCohort, mark: string)
   if (mark === 'line') return 'line-path';
   if (mark === 'area') return 'area-path';
   if (cohort.type === 'axis-domain') return 'axis-domain-path';
+  if (cohort.type === 'legend-gradient') return 'gradient-ramp';
   if (tag === 'path') return 'path';
   return tag || mark || 'shape';
 }
@@ -1086,7 +1167,7 @@ function inferP3DataRole(cohort: VisualCohort, authorRole: string): string {
   if (cohort.type === 'axis-labels') return 'scale-label';
   if (cohort.type === 'axis-title') return 'axis-title';
   if (cohort.type === 'axis-gridlines' || cohort.type === 'axis-domain' || cohort.type === 'axis-ticks') return 'reference';
-  if (cohort.type === 'legend-symbols' || cohort.type === 'legend-labels' || cohort.type === 'legend-title' || cohort.type === 'legend-entry' || cohort.type === 'legend') return 'legend';
+  if (cohort.type === 'legend-symbols' || cohort.type === 'legend-labels' || cohort.type === 'legend-title' || cohort.type === 'legend-gradient' || cohort.type === 'legend-entry' || cohort.type === 'legend') return 'legend';
   if (cohort.type === 'facet-panel') return 'layout';
   if (role.includes('label')) return 'label';
   return 'visual';
@@ -1105,6 +1186,7 @@ function inferCohortVizPart(cohort: VisualCohort): string {
     'legend-symbols': 'legend-symbol',
     'legend-labels': 'legend-label',
     'legend-title': 'legend-title',
+    'legend-gradient': 'legend-color-ramp',
     title: 'chart-title',
     'text-label': 'text-label',
     'facet-panel': 'facet-panel'
@@ -1575,6 +1657,7 @@ export function extractElementDataAnnotations(svg: SVGSVGElement, view: unknown,
 export function compileCohortSsvg(sourceSvg: string, cohorts: VisualCohort[], labels: CohortLabels, specKind: string, dataAnnotations: ElementDataAnnotations = {}): string {
   const doc = new DOMParser().parseFromString(sourceSvg, 'image/svg+xml');
   const svg = doc.documentElement as unknown as SVGSVGElement;
+  normalizeSvgPaintUrlReferences(svg);
   svg.setAttribute('p3-ssvg-version', '0.6-lean-cohort-authored');
   svg.setAttribute('p3-source', 'semantic-vega-editor');
   svg.setAttribute('p3-authoring-mode', 'author-labeled-rendered-cohorts');
@@ -1604,6 +1687,7 @@ export function compileCohortSsvg(sourceSvg: string, cohorts: VisualCohort[], la
       dataValueField: 'p3-data-value',
       encodingChannelField: 'p3-data-encoding-channel',
       paintFieldPrefix: 'p3-paint-*',
+      portableGradientPolicy: 'Gradient paint URLs are normalized from blob/document URLs to local url(#gradient_id) references during SSVG export.',
       containerPolicy: 'container-only hierarchy: non-renderable groups never receive p3-role or p3-viz-part',
       recommendedConsumerAction: 'Generate CompactVEM from the live SSVG DOM after loading. Treat SSVG DOM attributes as the source of semantic truth.'
     },

@@ -1,0 +1,8 @@
+Semantic Vega Editor v1.39 — AI labeling retry and manual fallback safety
+
+- Added bounded retry handling for AI cohort labeling: each cohort AI call is attempted twice before it is treated as failed.
+- Added a 30-second timeout per OpenAI labeling call so the UI does not hang indefinitely when the API is unresponsive.
+- Separated transient OpenAI/API/network failures from configuration failures: rate limits, timeouts, and 5xx/network failures are retried; API key/model/permission errors stop the run with a clear message.
+- When one cohort still fails after retries, the editor applies the local suggested/default label for that cohort and keeps going.
+- When two cohort requests fail consecutively, the editor assumes AI is currently unresponsive, stops automatic labeling, keeps any labels already produced, and tells the user to review/finish remaining cohorts manually or retry later.
+- Added visible AI status/progress text in the AI dialog and mirrored important retry/fallback messages in the bottom status panel.

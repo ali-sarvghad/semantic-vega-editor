@@ -61,6 +61,8 @@ const initialRenderStatus: RenderStatus = {
 
 const AI_SETTINGS_STORAGE_KEY = 'semantic-vega-editor.openai-settings.v1';
 const DEFAULT_AI_MODEL = 'gpt-4.1-mini';
+const AI_LABEL_RETRY_ATTEMPTS = 2;
+const AI_CONSECUTIVE_FALLBACK_LIMIT = 2;
 
 interface SavedAiSettings {
   apiKey?: string;
@@ -757,6 +759,9 @@ export function App() {
 
     try {
       let completed = 0;
+      let localFallbackCount = 0;
+      let consecutiveFallbackCount = 0;
+      let stoppedForManualFallback = false;
       for (const cohort of cohortsToLabel) {
         if (controller.signal.aborted) break;
         const progressMessage = `AI labeling ${completed + 1}/${cohortsToLabel.length}: ${cohort.title}`;
@@ -777,14 +782,18 @@ export function App() {
           chartKind: diagnostics.kind,
           specText: activeTab.spec,
           signal: controller.signal
-        }, 2);
+        }, AI_LABEL_RETRY_ATTEMPTS);
         const label = result.label;
         completed += 1;
         setAiProgress({ done: completed, total: cohortsToLabel.length });
         if (result.source === 'local-fallback') {
-          const fallbackMessage = `AI request failed for ${cohort.title}; used local fallback label “${label}”. Continuing…`;
+          localFallbackCount += 1;
+          consecutiveFallbackCount += 1;
+          const fallbackMessage = `AI did not respond for ${cohort.title} after ${AI_LABEL_RETRY_ATTEMPTS} attempts; used suggested label “${label}”.`;
           setAiStatus(fallbackMessage);
           updateActiveTab({ renderStatus: { ok: true, message: fallbackMessage, renderedAt: nowLabel() } });
+        } else {
+          consecutiveFallbackCount = 0;
         }
         setTabs((currentTabs) => currentTabs.map((tab) => {
           if (tab.id !== activeTabId) return tab;
@@ -804,18 +813,33 @@ export function App() {
             svaCreatedAt: null
           };
         }));
+
+        if (consecutiveFallbackCount >= AI_CONSECUTIVE_FALLBACK_LIMIT) {
+          stoppedForManualFallback = true;
+          const remaining = cohortsToLabel.length - completed;
+          const stopMessage = `AI seems unresponsive at the moment. I stopped automatic labeling after ${consecutiveFallbackCount} failed cohort requests. ${remaining} cohort${remaining === 1 ? '' : 's'} still need review or manual labeling.`;
+          setAiStatus(stopMessage);
+          updateActiveTab({ renderStatus: { ok: false, message: stopMessage, renderedAt: nowLabel() }, activeBottomTab: 'cohorts', showBottom: true });
+          break;
+        }
       }
-      if (!controller.signal.aborted) {
-        const completeMessage = 'AI labeling complete. Review and edit the labels as needed, then press Create SVA. If an API call failed, a local fallback label was used so no cohort is left empty.';
+      if (!controller.signal.aborted && !stoppedForManualFallback) {
+        const completeMessage = localFallbackCount > 0
+          ? `AI labeling complete with ${localFallbackCount} suggested fallback label${localFallbackCount === 1 ? '' : 's'} after retry failures. Review labels before creating the SVA.`
+          : 'AI labeling complete. Review and edit the labels as needed, then press Create SVA.';
         setAiStatus(completeMessage);
         updateActiveTab({ renderStatus: { ok: true, message: completeMessage, renderedAt: nowLabel() }, activeBottomTab: 'cohorts', showBottom: true });
       }
     } catch (error) {
       if ((error as Error)?.name === 'AbortError') {
-        setAiStatus('AI labeling cancelled. Existing generated labels were kept.');
+        const cancelMessage = 'AI labeling cancelled. Existing generated labels were kept.';
+        setAiStatus(cancelMessage);
+        updateActiveTab({ renderStatus: { ok: false, message: cancelMessage, renderedAt: nowLabel() }, activeBottomTab: 'cohorts', showBottom: true });
       } else {
         const message = error instanceof Error ? error.message : String(error);
-        setAiStatus(message);
+        const stopMessage = `AI labeling stopped: ${message}. Check the API key/model, or finish labeling manually.`;
+        setAiStatus(stopMessage);
+        updateActiveTab({ renderStatus: { ok: false, message: stopMessage, renderedAt: nowLabel() }, activeBottomTab: 'cohorts', showBottom: true });
       }
     } finally {
       setAiLabeling(false);
@@ -978,6 +1002,11 @@ export function App() {
                   <div className="ai-settings-note">Saved AI settings are used when you choose Label with AI. You can update the key/model here without starting a labeling run.</div>
                 )}
 
+              </div>
+
+              <div className="ai-status-box" role="status" aria-live="polite">
+                <span>{aiStatus}</span>
+                {aiProgress.total > 0 && <small>{aiProgress.done}/{aiProgress.total} cohorts processed</small>}
               </div>
 
               <div className="sva-download-actions ai-dialog-actions">

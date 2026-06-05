@@ -15,6 +15,26 @@ export interface AiCohortLabelRequest {
   signal?: AbortSignal;
 }
 
+const OPENAI_LABEL_TIMEOUT_MS = 30000;
+
+function createTimeoutSignal(parentSignal: AbortSignal | undefined, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(new DOMException('OpenAI request timed out.', 'TimeoutError')), timeoutMs);
+
+  const abortFromParent = () => controller.abort(parentSignal?.reason ?? new DOMException('Aborted', 'AbortError'));
+  if (parentSignal?.aborted) abortFromParent();
+  else parentSignal?.addEventListener('abort', abortFromParent, { once: true });
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      window.clearTimeout(timeout);
+      parentSignal?.removeEventListener('abort', abortFromParent);
+    }
+  };
+}
+
+
 function parseSvgSize(svgText: string) {
   const fallback = { width: 1100, height: 760 };
   try {
@@ -143,8 +163,9 @@ export function inferLocalCohortLabel(cohort: VisualCohort): string {
 
 function isLikelyTransientOpenAiError(error: unknown): boolean {
   if ((error as Error)?.name === 'AbortError') return false;
+  if ((error as Error)?.name === 'TimeoutError') return true;
   const message = error instanceof Error ? error.message : String(error || '');
-  return /failed to fetch|networkerror|cors|err_failed|timeout|temporar|rate|429|500|502|503|504/i.test(message);
+  return /failed to fetch|networkerror|cors|err_failed|timeout|timed out|temporar|rate|429|500|502|503|504/i.test(message);
 }
 
 async function delay(ms: number, signal?: AbortSignal) {
@@ -162,21 +183,28 @@ async function delay(ms: number, signal?: AbortSignal) {
   });
 }
 
-export async function labelCohortWithOpenAiResilient(request: AiCohortLabelRequest, attempts = 2): Promise<{ label: string; source: 'openai' | 'local-fallback'; warning?: string }> {
+export async function labelCohortWithOpenAiResilient(request: AiCohortLabelRequest, attempts = 2): Promise<{ label: string; source: 'openai' | 'local-fallback'; attempts: number; warning?: string }> {
+  const maxAttempts = Math.max(1, attempts);
   let lastError: unknown = null;
-  for (let attempt = 1; attempt <= Math.max(1, attempts); attempt += 1) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       const label = await labelCohortWithOpenAi(request);
-      return { label, source: 'openai' };
+      return { label, source: 'openai', attempts: attempt };
     } catch (error) {
       if ((error as Error)?.name === 'AbortError') throw error;
       lastError = error;
-      if (!isLikelyTransientOpenAiError(error) || attempt >= attempts) break;
+
+      // Authentication, permissions, unsupported-model, and malformed-request errors
+      // will not be fixed by retrying each cohort. Surface them immediately so the
+      // user can update settings rather than filling the chart with weak defaults.
+      if (!isLikelyTransientOpenAiError(error)) throw error;
+
+      if (attempt >= maxAttempts) break;
       await delay(550 * attempt, request.signal);
     }
   }
   const message = lastError instanceof Error ? lastError.message : String(lastError || 'OpenAI request failed');
-  return { label: inferLocalCohortLabel(request.cohort), source: 'local-fallback', warning: message };
+  return { label: inferLocalCohortLabel(request.cohort), source: 'local-fallback', attempts: maxAttempts, warning: message };
 }
 
 export async function labelCohortWithOpenAi(request: AiCohortLabelRequest): Promise<string> {
@@ -198,32 +226,37 @@ export async function labelCohortWithOpenAi(request: AiCohortLabelRequest): Prom
     `Spec excerpt: ${request.specText.slice(0, 4000)}`
   ].join('\n');
 
-  const response = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${request.apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: request.model,
-      input: [
-        {
-          role: 'user',
-          content: [
-            { type: 'input_text', text: prompt },
-            { type: 'input_image', image_url: imageUrl, detail: 'high' }
-          ]
-        }
-      ],
-      max_output_tokens: 80
-    }),
-    signal: request.signal
-  });
+  const timeout = createTimeoutSignal(request.signal, OPENAI_LABEL_TIMEOUT_MS);
+  try {
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${request.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: request.model,
+        input: [
+          {
+            role: 'user',
+            content: [
+              { type: 'input_text', text: prompt },
+              { type: 'input_image', image_url: imageUrl, detail: 'high' }
+            ]
+          }
+        ],
+        max_output_tokens: 80
+      }),
+      signal: timeout.signal
+    });
 
-  if (!response.ok) {
-    const message = await response.text().catch(() => '');
-    throw new Error(`OpenAI labeling failed for ${request.cohort.title} (${response.status}). ${message}`.trim());
+    if (!response.ok) {
+      const message = await response.text().catch(() => '');
+      throw new Error(`OpenAI labeling failed for ${request.cohort.title} (${response.status}). ${message}`.trim());
+    }
+    const data = await response.json();
+    return cleanLabel(extractResponseText(data), request.cohort);
+  } finally {
+    timeout.cleanup();
   }
-  const data = await response.json();
-  return cleanLabel(extractResponseText(data), request.cohort);
 }

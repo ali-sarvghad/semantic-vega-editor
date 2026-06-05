@@ -1,0 +1,5 @@
+Semantic Vega Editor v1.34 — AI dialog progress cleanup
+
+- Removed the progress/status block from the AI labeling/settings dialog.
+- AI labeling progress remains available through the main bottom progress/status area during actual labeling runs.
+- Kept the AI settings dialog focused on API key/model management and save/clear actions.

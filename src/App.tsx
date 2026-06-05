@@ -972,11 +972,6 @@ export function App() {
                   <div className="ai-settings-note">Saved AI settings are used when you choose Label with AI. You can update the key/model here without starting a labeling run.</div>
                 )}
 
-                <div className="ai-progress-block">
-                  <div className="ai-progress-header"><strong>Progress</strong><span>{aiProgress.done}/{aiProgress.total || authorableCohorts.length} cohorts</span></div>
-                  <div className="ai-progress-track"><div className="ai-progress-fill" style={{ width: `${Math.round((aiProgress.done / Math.max(1, aiProgress.total || authorableCohorts.length)) * 100)}%` }} /></div>
-                  <p>{aiStatus}</p>
-                </div>
               </div>
 
               <div className="sva-download-actions ai-dialog-actions">

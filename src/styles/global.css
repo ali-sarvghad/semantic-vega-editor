@@ -1673,3 +1673,95 @@ button:disabled, .tool-button:disabled { opacity: .52; cursor: not-allowed; }
 @media (max-width: 1180px) {
   .top-menu-bar { order: 3; width: 100%; border-left: 0; border-right: 0; padding-left: 50px; }
 }
+
+/* v1.33: AI settings dialog contrast/readability fix. */
+.ai-label-dialog {
+  background: #ffffff;
+  color: #172033;
+}
+.ai-label-dialog .sva-download-dialog-header h2 {
+  color: #0f172a;
+}
+.ai-label-dialog .sva-download-dialog-header p {
+  color: #64748b;
+}
+.ai-label-dialog .ai-label-form label {
+  color: #172033;
+}
+.ai-label-dialog .ai-label-form label span:first-child {
+  color: #64748b;
+}
+.ai-label-dialog .ai-label-form input[type="password"],
+.ai-label-dialog .ai-label-form select {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #cbd5e1;
+  box-shadow: none;
+}
+.ai-label-dialog .ai-label-form input[type="password"]:focus,
+.ai-label-dialog .ai-label-form select:focus {
+  border-color: #0db39e;
+  box-shadow: 0 0 0 3px rgba(13,179,158,.16);
+}
+.ai-label-dialog .ai-label-form input[type="password"]:disabled,
+.ai-label-dialog .ai-label-form select:disabled {
+  background: #f8fafc;
+  color: #334155;
+  opacity: 1;
+}
+.ai-label-dialog .ai-label-form small {
+  color: #64748b;
+}
+.ai-label-dialog .ai-settings-note {
+  background: #ecfeff;
+  border-color: rgba(13,179,158,.24);
+  color: #334155;
+}
+.ai-label-dialog .ai-progress-block {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+.ai-label-dialog .ai-progress-header {
+  color: #64748b;
+}
+.ai-label-dialog .ai-progress-header strong {
+  color: #0f172a;
+}
+.ai-label-dialog .ai-progress-track {
+  background: #dbeafe;
+}
+.ai-label-dialog .ai-progress-block p {
+  color: #475569;
+}
+.ai-label-dialog .tool-button {
+  background: #ffffff;
+  color: #172033;
+  border-color: #cbd5e1;
+}
+.ai-label-dialog .tool-button:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+.ai-label-dialog .tool-button.primary-download {
+  background: #0f766e !important;
+  border-color: #0f766e !important;
+  color: #ffffff !important;
+}
+.ai-label-dialog .tool-button:disabled {
+  opacity: .68;
+  color: #64748b;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+.ai-label-dialog .sva-dialog-close:disabled {
+  opacity: .8;
+}
+body.dark-theme .ai-label-dialog {
+  background: #ffffff;
+  color: #172033;
+}
+body.dark-theme .ai-label-dialog .tool-button:not(.primary-download) {
+  background: #ffffff;
+  color: #172033;
+  border-color: #cbd5e1;
+}

@@ -1,0 +1,6 @@
+Semantic Vega Editor v1.33 — AI Settings Dialog Contrast Fix
+
+- Fixed low-contrast text and controls in the AI Labeling Settings dialog.
+- Scoped the AI dialog to a light, high-contrast surface regardless of surrounding app theme.
+- Made disabled buttons readable while still visually inactive.
+- Improved readability of OpenAI API key field, model selector, progress label, status text, and settings note.

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import embed, { type Result } from 'vega-embed';
+import * as vegaLite from 'vega-lite';
 import { Check, Clipboard, RotateCcw, SlidersHorizontal, ZoomIn, ZoomOut } from 'lucide-react';
 import type { SpecDiagnostics } from '../lib/specAnalysis';
 import { extractDeclaredWidgets, type DeclaredWidget } from '../lib/specWidgets';
@@ -49,6 +50,29 @@ export function RenderPanel({ activeTool, spec, diagnostics, renderRequest, sour
       spec={spec}
     />
   );
+}
+
+
+function specSchemaKind(spec: unknown): 'vega' | 'vega-lite' | 'unknown' {
+  const schema = String((spec as any)?.$schema || '').toLowerCase();
+  if (schema.includes('vega-lite')) return 'vega-lite';
+  if (schema.includes('/vega/')) return 'vega';
+  if ((spec as any)?.mark || (spec as any)?.encoding || (spec as any)?.layer || (spec as any)?.hconcat || (spec as any)?.vconcat) return 'vega-lite';
+  return 'unknown';
+}
+
+function compileVegaSpecForProvenance(kind: string, spec: unknown): unknown {
+  if (!spec) return null;
+  const inferred = kind === 'vega-lite' || specSchemaKind(spec) === 'vega-lite' ? 'vega-lite' : specSchemaKind(spec);
+  if (inferred === 'vega-lite') {
+    try {
+      return (vegaLite as any).compile(spec).spec;
+    } catch (_error) {
+      return null;
+    }
+  }
+  if (inferred === 'vega') return spec;
+  return null;
 }
 
 function safeParseSpecText(specText: string): unknown | undefined {
@@ -154,7 +178,8 @@ function LiveRenderPanel({ spec, diagnostics, renderRequest, sourceSvg, cohorts,
         }
 
         const runtimeSpec = (result as any).spec ?? normalized.spec;
-        setCompiledVegaSpec(runtimeSpec);
+        const compiledForProvenance = compileVegaSpecForProvenance(diagnostics.kind, normalized.spec) ?? runtimeSpec;
+        setCompiledVegaSpec(compiledForProvenance);
         const discovered = discoverVisualCohorts(svg, runtimeSpec);
         const annotations = extractElementDataAnnotations(svg, result.view, runtimeSpec);
         setDataAnnotations(annotations);
@@ -163,9 +188,9 @@ function LiveRenderPanel({ spec, diagnostics, renderRequest, sourceSvg, cohorts,
           sourceSpecType: diagnostics.kind,
           sourceSpec: renderableSpec,
           normalizedSpec: normalized.spec,
-          compiledVegaSpec: runtimeSpec,
+          compiledVegaSpec: compiledForProvenance,
           dataUrlRewrites: normalized.rewrites,
-          editorVersion: '1.40'
+          editorVersion: '1.41'
         };
         const compiled = compileCohortSsvg(discovered.sourceSvg, discovered.cohorts, {}, diagnostics.kind, annotations, provenance);
         onSsvgGenerated(compiled);
@@ -193,7 +218,7 @@ function LiveRenderPanel({ spec, diagnostics, renderRequest, sourceSvg, cohorts,
       normalizedSpec: diagnostics.parsed ? normalizeSpecDataUrls(diagnostics.parsed).spec : undefined,
       compiledVegaSpec,
       dataUrlRewrites: dataUrlRewriteSnapshot,
-      editorVersion: '1.40'
+      editorVersion: '1.41'
     };
     const compiled = compileCohortSsvg(sourceSvg, cohorts, labels, diagnostics.kind, dataAnnotations, provenance);
     onSsvgGenerated(compiled);

@@ -16,10 +16,10 @@ export interface SemanticVegaProvenanceInput {
 export interface SerializedProvenanceItem {
   key: 'sourceSpec' | 'normalizedSpec' | 'compiledVegaSpec';
   included: boolean;
-  format: 'base64-json' | 'omitted';
+  format: 'json' | 'omitted';
   byteLength: number;
   hash: string;
-  valueBase64?: string;
+  value?: unknown;
   omittedReason?: string;
 }
 
@@ -32,17 +32,12 @@ export interface SemanticVegaProvenanceMetadata {
   artifactTitle?: string;
   sourceSpecType: string;
   dataUrlRewrites: string[];
-  embeddingPolicy: {
-    encoding: 'base64-json';
-    maxBytesPerSpec: number;
-    oversizedSpecAction: 'omit-value-keep-hash-and-size';
-    note: string;
+  specs: {
+    sourceSpec?: unknown;
+    normalizedSpec?: unknown;
+    compiledVegaSpec?: unknown;
   };
-  specs: SerializedProvenanceItem[];
-  interactionRecovery: {
-    statement: string;
-    recommendedConsumerAction: string[];
-  };
+  specSummary: SerializedProvenanceItem[];
 }
 
 export function stableJsonStringify(value: unknown): string {
@@ -105,53 +100,56 @@ function serializeSpecItem(key: SerializedProvenanceItem['key'], value: unknown,
   return {
     key,
     included: true,
-    format: 'base64-json',
+    format: 'json',
     byteLength,
     hash,
-    valueBase64: encodeBase64Utf8(json)
+    value
   };
 }
 
 export function buildSemanticVegaProvenanceMetadata(input: SemanticVegaProvenanceInput, maxBytes = DEFAULT_PROVENANCE_EMBED_LIMIT_BYTES): SemanticVegaProvenanceMetadata {
-  const specs = [
+  const items = [
     serializeSpecItem('sourceSpec', input.sourceSpec, maxBytes),
     serializeSpecItem('normalizedSpec', input.normalizedSpec, maxBytes),
     serializeSpecItem('compiledVegaSpec', input.compiledVegaSpec, maxBytes)
   ].filter(Boolean) as SerializedProvenanceItem[];
+  const specs: SemanticVegaProvenanceMetadata['specs'] = {};
+  items.forEach((item) => {
+    if (item.included && item.value !== undefined) specs[item.key] = item.value;
+  });
+  const specSummary = items.map((item) => {
+    const { value: _value, ...summary } = item;
+    return summary;
+  }) as SerializedProvenanceItem[];
 
   return {
     kind: 'semantic-vega-provenance',
     version: SEMANTIC_VEGA_PROVENANCE_VERSION,
     source: 'Semantic Vega Editor',
     createdAt: new Date().toISOString(),
-    editorVersion: input.editorVersion || '1.40',
+    editorVersion: input.editorVersion || '1.41',
     artifactTitle: input.artifactTitle,
     sourceSpecType: String(input.sourceSpecType || 'unknown'),
     dataUrlRewrites: input.dataUrlRewrites || [],
-    embeddingPolicy: {
-      encoding: 'base64-json',
-      maxBytesPerSpec: maxBytes,
-      oversizedSpecAction: 'omit-value-keep-hash-and-size',
-      note: 'Specs are embedded when reasonably small. Oversized specs, usually caused by large inline datasets, are omitted from this compact metadata block but retain hash and byte length.'
-    },
     specs,
-    interactionRecovery: {
-      statement: 'Embedded source and compiled specifications allow post-production tools to recover declarative interaction definitions when the specifications are included.',
-      recommendedConsumerAction: [
-        'Read metadata[p3-kind="semantic-vega-provenance"].',
-        'Decode each included specs[*].valueBase64 as UTF-8 JSON.',
-        'Prefer compiledVegaSpec for runtime reconstruction; fall back to normalizedSpec or sourceSpec.',
-        'Use SSVG element attributes and SVA rehydration maps to reconnect semantic labels after re-rendering.'
-      ]
-    }
+    specSummary
   };
 }
 
-export function recoverSpecsFromSemanticVegaProvenance(metadata: SemanticVegaProvenanceMetadata): Record<string, unknown> {
+export function recoverSpecsFromSemanticVegaProvenance(metadata: SemanticVegaProvenanceMetadata | any): Record<string, unknown> {
   const recovered: Record<string, unknown> = {};
-  metadata.specs.forEach((item) => {
-    if (!item.included || !item.valueBase64) return;
-    recovered[item.key] = JSON.parse(decodeBase64Utf8(item.valueBase64));
-  });
+  if (metadata?.specs && !Array.isArray(metadata.specs)) {
+    ['sourceSpec', 'normalizedSpec', 'compiledVegaSpec'].forEach((key) => {
+      if (metadata.specs[key] != null) recovered[key] = metadata.specs[key];
+    });
+    return recovered;
+  }
+  if (Array.isArray(metadata?.specs)) {
+    metadata.specs.forEach((item: any) => {
+      if (!item?.included) return;
+      if (item.value != null) recovered[item.key] = item.value;
+      else if (item.valueBase64) recovered[item.key] = JSON.parse(decodeBase64Utf8(item.valueBase64));
+    });
+  }
   return recovered;
 }

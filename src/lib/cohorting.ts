@@ -1731,7 +1731,7 @@ export function compileCohortSsvg(sourceSvg: string, cohorts: VisualCohort[], la
       recommendedConsumerAction: 'Generate CompactVEM from the live SSVG DOM after loading. Treat SSVG DOM attributes as the source of semantic truth.'
     },
     latentNonRendering: readLatentNonRenderingMetadata(svg),
-    provenance: provenanceInput ? buildSemanticVegaProvenanceMetadata({ ...provenanceInput, sourceSpecType: provenanceInput.sourceSpecType || specKind }) : null,
+    hasSemanticVegaProvenance: Boolean(provenanceInput),
     containers: buildContainerHierarchy(cohorts).map((container) => ({
       containerId: container.containerId,
       kind: container.kind,
@@ -1777,12 +1777,13 @@ export function compileCohortSsvg(sourceSvg: string, cohorts: VisualCohort[], la
   svg.insertBefore(metadataEl, svg.firstChild);
 
   svg.querySelector('metadata[p3-kind="semantic-vega-provenance"]')?.remove();
-  if (metadata.provenance) {
+  const cleanProvenance = provenanceInput ? buildSemanticVegaProvenanceMetadata({ ...provenanceInput, sourceSpecType: provenanceInput.sourceSpecType || specKind }) : null;
+  if (cleanProvenance) {
     const provenanceEl = doc.createElementNS(SVG_NS, 'metadata');
     provenanceEl.setAttribute('p3-kind', 'semantic-vega-provenance');
     provenanceEl.setAttribute('type', 'application/json');
-    provenanceEl.setAttribute('data-format', 'json-with-base64-spec-values');
-    provenanceEl.textContent = JSON.stringify(metadata.provenance, null, 2);
+    provenanceEl.setAttribute('data-format', 'clean-json-specs');
+    provenanceEl.textContent = JSON.stringify(cleanProvenance, null, 2);
     svg.insertBefore(provenanceEl, svg.firstChild);
   }
 

@@ -1,0 +1,6 @@
+Semantic Vega Editor v1.41 — clean embedded specs
+
+- Simplified Semantic Vega provenance metadata so embedded specs appear as clean JSON objects instead of base64 payloads.
+- Removed duplicated full provenance from the general SSVG metadata block; the dedicated semantic-vega-provenance metadata block remains the source of truth.
+- Added schema-aware compiled-spec handling so Vega-Lite exports store an actual compiled Vega spec when available.
+- Provenance metadata now keeps only concise spec summaries for size/hash diagnostics and stores the clean decoded sourceSpec, normalizedSpec, and compiledVegaSpec values directly.

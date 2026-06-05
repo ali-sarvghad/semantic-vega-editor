@@ -1,0 +1,9 @@
+Semantic Vega Editor v1.32
+
+- Added a conventional top menu bar with File, Actions, and Settings menus.
+- File menu includes New, Open, Save spec, Download SSVG, and Download SVA.
+- Actions menu includes Run / discover cohorts, Manual Label, Label with AI, and Create SVA.
+- Settings menu now exposes AI Labeling Settings, allowing the saved OpenAI API key and model to be updated or cleared after initial setup.
+- AI settings dialog can now be used independently from the Label with AI workflow; opening Settings does not start AI labeling.
+- Fixed the active Create SVA button color so it uses the requested blue-green #0db39e when generation is available.
+- Disabled Create SVA state is now visibly gray, while active state is clearly blue-green.

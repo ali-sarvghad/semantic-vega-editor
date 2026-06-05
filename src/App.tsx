@@ -9,6 +9,7 @@ import {
   PanelBottom,
   Play,
   Save,
+  Settings,
   Wand2,
   X,
   Zap
@@ -112,7 +113,9 @@ export function App() {
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
   const [downloadKind, setDownloadKind] = useState<SvaDownloadKind>('html');
   const [labelMenuOpen, setLabelMenuOpen] = useState(false);
+  const [activeTopMenu, setActiveTopMenu] = useState<'file' | 'actions' | 'settings' | null>(null);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [aiDialogMode, setAiDialogMode] = useState<'labeling' | 'settings'>('labeling');
   const [aiApiKey, setAiApiKey] = useState('');
   const [aiModel, setAiModel] = useState(DEFAULT_AI_MODEL);
   const [aiModels, setAiModels] = useState<OpenAiModelInfo[]>([]);
@@ -123,6 +126,7 @@ export function App() {
   const [aiProgress, setAiProgress] = useState({ done: 0, total: 0 });
   const aiAbortRef = useRef<AbortController | null>(null);
   const labelDropdownRef = useRef<HTMLDivElement | null>(null);
+  const topMenuRef = useRef<HTMLDivElement | null>(null);
   const openFileInputRef = useRef<HTMLInputElement | null>(null);
   const cancelRenameRef = useRef(false);
 
@@ -132,6 +136,14 @@ export function App() {
     } catch {
       return {};
     }
+  }
+
+  function hydrateAiSettingsFromStorage() {
+    const saved = readSavedAiSettings();
+    setAiApiKey(saved.apiKey ?? '');
+    setAiModel(saved.model ?? DEFAULT_AI_MODEL);
+    setAiSaveSettings(Boolean(saved.apiKey || saved.model));
+    return saved;
   }
 
   useEffect(() => {
@@ -163,6 +175,27 @@ export function App() {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [labelMenuOpen]);
+
+  useEffect(() => {
+    if (!activeTopMenu) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && topMenuRef.current?.contains(target)) return;
+      setActiveTopMenu(null);
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') setActiveTopMenu(null);
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeTopMenu]);
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const spec = activeTab.spec;
@@ -571,6 +604,46 @@ export function App() {
     setDownloadDialogOpen(false);
   }
 
+  function runMenuAction(action: () => void) {
+    setActiveTopMenu(null);
+    action();
+  }
+
+  function openAiSettingsDialog() {
+    hydrateAiSettingsFromStorage();
+    setAiDialogMode('settings');
+    setAiStatus('Update the OpenAI API key and default model used for AI-assisted cohort labeling.');
+    setAiDialogOpen(true);
+    setActiveTopMenu(null);
+  }
+
+  function saveAiSettingsOnly() {
+    const apiKey = aiApiKey.trim();
+    const model = aiModel.trim() || DEFAULT_AI_MODEL;
+    if (!apiKey) {
+      localStorage.removeItem(AI_SETTINGS_STORAGE_KEY);
+      setAiApiKey('');
+      setAiModel(model);
+      setAiSaveSettings(false);
+      setAiStatus('OpenAI settings cleared from this browser.');
+      return;
+    }
+    localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify({ apiKey, model }));
+    setAiApiKey(apiKey);
+    setAiModel(model);
+    setAiSaveSettings(true);
+    setAiStatus('OpenAI settings saved locally in this browser.');
+  }
+
+  function clearAiSettings() {
+    localStorage.removeItem(AI_SETTINGS_STORAGE_KEY);
+    setAiApiKey('');
+    setAiModel(DEFAULT_AI_MODEL);
+    setAiSaveSettings(false);
+    setAiModels([]);
+    setAiStatus('OpenAI settings cleared from this browser.');
+  }
+
   function prepareAiLabelingView(firstAuthorable: string) {
     setPreviewCollapsed(false);
     updateActiveTab({
@@ -605,6 +678,7 @@ export function App() {
       return;
     }
 
+    setAiDialogMode('labeling');
     setAiDialogOpen(true);
     setAiStatus('Enter an OpenAI API key, load models, then start AI labeling.');
   }
@@ -651,11 +725,13 @@ export function App() {
     const shouldPersist = options?.shouldPersist ?? aiSaveSettings;
     if (!apiKey) {
       setAiStatus('Enter an OpenAI API key before starting AI labeling.');
+      setAiDialogMode('labeling');
       setAiDialogOpen(true);
       return;
     }
     if (!model) {
       setAiStatus('Select or enter a model before starting AI labeling.');
+      setAiDialogMode('labeling');
       setAiDialogOpen(true);
       return;
     }
@@ -753,6 +829,42 @@ export function App() {
             </div>
           </div>
 
+          <div className="top-menu-bar" ref={topMenuRef} aria-label="Application menus">
+            <div className="top-menu">
+              <button type="button" className={`top-menu-trigger ${activeTopMenu === 'file' ? 'open' : ''}`} onClick={() => setActiveTopMenu((menu) => menu === 'file' ? null : 'file')}>File</button>
+              {activeTopMenu === 'file' && (
+                <div className="top-menu-dropdown" role="menu">
+                  <button role="menuitem" onClick={() => runMenuAction(createNewSpec)}><FilePlus2 size={15} /> New</button>
+                  <button role="menuitem" onClick={() => runMenuAction(() => openFileInputRef.current?.click())}><FolderOpen size={15} /> Open…</button>
+                  <button role="menuitem" onClick={() => runMenuAction(saveSpecFile)}><Save size={15} /> Save spec</button>
+                  <button role="menuitem" onClick={() => runMenuAction(exportSsvg)}><Download size={15} /> Download SSVG</button>
+                  <button role="menuitem" onClick={() => runMenuAction(openDownloadDialog)}><Download size={15} /> Download SVA…</button>
+                </div>
+              )}
+            </div>
+
+            <div className="top-menu">
+              <button type="button" className={`top-menu-trigger ${activeTopMenu === 'actions' ? 'open' : ''}`} onClick={() => setActiveTopMenu((menu) => menu === 'actions' ? null : 'actions')}>Actions</button>
+              {activeTopMenu === 'actions' && (
+                <div className="top-menu-dropdown" role="menu">
+                  <button role="menuitem" onClick={() => runMenuAction(runCohortDiscovery)}><Play size={15} /> Run / discover cohorts</button>
+                  <button role="menuitem" onClick={() => runMenuAction(startLabeling)}><Tag size={15} /> Manual Label</button>
+                  <button role="menuitem" onClick={() => runMenuAction(openAiLabelDialog)}><Bot size={15} /> Label with AI</button>
+                  <button role="menuitem" onClick={() => runMenuAction(createSva)}><Wand2 size={15} /> Create SVA</button>
+                </div>
+              )}
+            </div>
+
+            <div className="top-menu">
+              <button type="button" className={`top-menu-trigger ${activeTopMenu === 'settings' ? 'open' : ''}`} onClick={() => setActiveTopMenu((menu) => menu === 'settings' ? null : 'settings')}>Settings</button>
+              {activeTopMenu === 'settings' && (
+                <div className="top-menu-dropdown" role="menu">
+                  <button role="menuitem" onClick={() => runMenuAction(openAiSettingsDialog)}><Settings size={15} /> AI labeling settings</button>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="toolbar-group toolbar-actions">
             <button className="tool-button" onClick={createNewSpec}><FilePlus2 size={17} /> New</button>
             <button className="tool-button" onClick={() => openFileInputRef.current?.click()}><FolderOpen size={17} /> Open</button>
@@ -827,8 +939,8 @@ export function App() {
             <section className="sva-download-dialog ai-label-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-label-title" onMouseDown={(event) => event.stopPropagation()}>
               <div className="sva-download-dialog-header">
                 <div>
-                  <h2 id="ai-label-title">Label Cohorts with AI</h2>
-                  <p>Send each highlighted cohort thumbnail to an OpenAI vision-capable model and generate editable Semantic Vega labels.</p>
+                  <h2 id="ai-label-title">{aiDialogMode === 'settings' ? 'AI Labeling Settings' : 'Label Cohorts with AI'}</h2>
+                  <p>{aiDialogMode === 'settings' ? 'Update or clear the OpenAI API key and default model saved in this browser.' : 'Send each highlighted cohort thumbnail to an OpenAI vision-capable model and generate editable Semantic Vega labels.'}</p>
                 </div>
                 <button type="button" className="sva-dialog-close" aria-label="Close AI labeling dialog" onClick={closeAiDialog} disabled={aiLabeling}><X size={18} /></button>
               </div>
@@ -837,6 +949,7 @@ export function App() {
                 <label>
                   <span>OpenAI API key</span>
                   <input type="password" value={aiApiKey} placeholder="sk-..." onChange={(event) => setAiApiKey(event.target.value)} disabled={aiLabeling || aiLoadingModels} />
+                  <small>Stored only in this browser when saved. Leave empty and save/clear to remove the saved key.</small>
                 </label>
 
                 <div className="ai-model-row">
@@ -850,10 +963,14 @@ export function App() {
                   <button type="button" className="tool-button" onClick={loadAiModels} disabled={aiLoadingModels || aiLabeling}>{aiLoadingModels ? 'Loading…' : 'Load models'}</button>
                 </div>
 
-                <label className="ai-save-row">
-                  <input type="checkbox" checked={aiSaveSettings} onChange={(event) => setAiSaveSettings(event.target.checked)} disabled={aiLabeling} />
-                  <span>Save key and selected model locally in this browser</span>
-                </label>
+                {aiDialogMode === 'labeling' ? (
+                  <label className="ai-save-row">
+                    <input type="checkbox" checked={aiSaveSettings} onChange={(event) => setAiSaveSettings(event.target.checked)} disabled={aiLabeling} />
+                    <span>Save key and selected model locally in this browser</span>
+                  </label>
+                ) : (
+                  <div className="ai-settings-note">Saved AI settings are used when you choose Label with AI. You can update the key/model here without starting a labeling run.</div>
+                )}
 
                 <div className="ai-progress-block">
                   <div className="ai-progress-header"><strong>Progress</strong><span>{aiProgress.done}/{aiProgress.total || authorableCohorts.length} cohorts</span></div>
@@ -862,9 +979,19 @@ export function App() {
                 </div>
               </div>
 
-              <div className="sva-download-actions">
-                {aiLabeling ? <button type="button" className="tool-button" onClick={cancelAiLabeling}>Cancel labeling</button> : <button type="button" className="tool-button" onClick={closeAiDialog}>Close</button>}
-                <button type="button" className="tool-button primary-download" onClick={() => startAiLabeling()} disabled={aiLabeling || !aiApiKey.trim()}><Bot size={17} /> Start AI labeling</button>
+              <div className="sva-download-actions ai-dialog-actions">
+                {aiDialogMode === 'settings' ? (
+                  <>
+                    <button type="button" className="tool-button" onClick={clearAiSettings} disabled={aiLabeling}>Clear saved key</button>
+                    <button type="button" className="tool-button" onClick={closeAiDialog} disabled={aiLabeling}>Close</button>
+                    <button type="button" className="tool-button primary-download" onClick={saveAiSettingsOnly} disabled={aiLabeling}><Settings size={17} /> Save settings</button>
+                  </>
+                ) : (
+                  <>
+                    {aiLabeling ? <button type="button" className="tool-button" onClick={cancelAiLabeling}>Cancel labeling</button> : <button type="button" className="tool-button" onClick={closeAiDialog}>Close</button>}
+                    <button type="button" className="tool-button primary-download" onClick={() => startAiLabeling()} disabled={aiLabeling || !aiApiKey.trim()}><Bot size={17} /> Start AI labeling</button>
+                  </>
+                )}
               </div>
             </section>
           </div>

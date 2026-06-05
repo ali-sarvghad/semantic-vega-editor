@@ -1580,3 +1580,96 @@ body.resizing-bottom-panel {
 .ai-progress-fill { height: 100%; border-radius: inherit; background: #0db39e; transition: width .22s ease; }
 .ai-progress-block p { margin: 9px 0 0; color: #d8deea; font-size: 13px; line-height: 1.45; }
 button:disabled, .tool-button:disabled { opacity: .52; cursor: not-allowed; }
+
+/* v1.32: Top menus, AI settings access, and active SVA button color. */
+.top-menu-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 0 4px;
+  min-height: 34px;
+  border-left: 1px solid rgba(255,255,255,.08);
+  border-right: 1px solid rgba(255,255,255,.08);
+}
+.top-menu { position: relative; display: inline-flex; }
+.top-menu-trigger {
+  height: 32px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #d8deea;
+  font-size: 13px;
+  font-weight: 650;
+}
+.top-menu-trigger:hover,
+.top-menu-trigger.open {
+  background: rgba(255,255,255,.10);
+  color: #ffffff;
+}
+.top-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  z-index: 90;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: #242832;
+  box-shadow: 0 18px 46px rgba(0,0,0,.42);
+}
+.top-menu-dropdown button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #e9edf5;
+  text-align: left;
+  font-size: 13px;
+}
+.top-menu-dropdown button:hover,
+.top-menu-dropdown button:focus-visible {
+  background: rgba(255,255,255,.09);
+  outline: none;
+}
+.ai-label-form small {
+  color: #8fa0ba;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.ai-settings-note {
+  border: 1px solid rgba(125, 211, 252, .24);
+  border-radius: 10px;
+  background: rgba(14, 165, 164, .10);
+  color: #d8deea;
+  padding: 10px 11px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.ai-dialog-actions { flex-wrap: wrap; }
+.tool-button.sva-button:not(.is-disabled) {
+  background: #0db39e !important;
+  border-color: #0a927f !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 22px rgba(13, 179, 158, .24);
+}
+.tool-button.sva-button:not(.is-disabled):hover {
+  background: #0ba891 !important;
+  border-color: #087e71 !important;
+}
+.tool-button.sva-button.is-disabled {
+  background: #6b7280 !important;
+  border-color: #5b6470 !important;
+  color: #e5e7eb !important;
+  box-shadow: none;
+  opacity: .55;
+}
+@media (max-width: 1180px) {
+  .top-menu-bar { order: 3; width: 100%; border-left: 0; border-right: 0; padding-left: 50px; }
+}

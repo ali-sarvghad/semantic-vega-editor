@@ -333,8 +333,14 @@ function legendGradientCandidates(legend: Element): Element[] {
   const candidates = new Set<Element>();
   legend.querySelectorAll('.role-legend-gradient, [class*="role-legend-gradient"]').forEach((el) => candidates.add(el));
   legend.querySelectorAll('.role-legend-gradient path, .role-legend-gradient rect, .role-legend-gradient image, [class*="role-legend-gradient"] path, [class*="role-legend-gradient"] rect, [class*="role-legend-gradient"] image').forEach((el) => candidates.add(el));
-  legend.querySelectorAll('[fill^="url(#"], [stroke^="url(#"]]').forEach((el) => {
-    if (closestRoleBoundary(el) === 'legend') candidates.add(el);
+  // Avoid CSS attribute selectors such as [fill^="url(#"]: the # character
+  // inside selector literals can be parsed inconsistently and caused Run to fail.
+  // Scan paint-bearing elements directly and test the attribute values in JS.
+  legend.querySelectorAll('[fill], [stroke]').forEach((el) => {
+    const fill = el.getAttribute('fill') || '';
+    const stroke = el.getAttribute('stroke') || '';
+    const hasLocalPaintRef = /url\(\s*['"]?#/.test(fill) || /url\(\s*['"]?#/.test(stroke);
+    if (hasLocalPaintRef && closestRoleBoundary(el) === 'legend') candidates.add(el);
   });
   return Array.from(candidates);
 }
